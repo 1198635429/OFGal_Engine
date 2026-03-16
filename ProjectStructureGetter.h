@@ -4,17 +4,18 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <map>
+#include <filesystem>
+#include <memory>
 
-
-struct ProjectStructure
-{ 
-	int sizeofLine;
-	std::vector<std::string> lines;
+struct FolderStructure {
+	std::vector<std::string> Files;
+	std::map<std::string, std::unique_ptr<FolderStructure>> Folders;
 };
 
-ProjectStructure GetProjectStructure(const char* path)
-{
-	ProjectStructure projectStructure;
-	
-	return projectStructure;
-}
+struct ProjectStructure { 
+	std::vector<FolderStructure> Folders;
+};
+
+ProjectStructure GetProjectStructure(const char* RootDirectory);
+FolderStructure GetFolderStructure(const char* Directory);
