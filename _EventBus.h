@@ -15,6 +15,7 @@ public:
 	}
 
 	using SoundPlay_Handler = std::function < bool(const char*) >;		//bool表示是否成功，char*则指向音频文件路径，视实际情况更改
+	using InputEvent_Handler = std::function <void(const InputEvent&)>;   //这是我的输入系统的函数对应的储存标签
 	//其它事件类型，请自行添加
 
 	// 订阅播放音频事件

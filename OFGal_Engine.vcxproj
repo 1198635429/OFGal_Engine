@@ -139,7 +139,9 @@
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h" />
     <ClInclude Include="cmdDrawer.h" />
+    <ClInclude Include="InputEvent.h" />
     <ClInclude Include="InputSystem.h" />
+    <ClInclude Include="KeyCode.h" />
     <ClInclude Include="_EventBus.h" />
   </ItemGroup>
   <ItemGroup>

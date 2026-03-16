@@ -92,6 +92,12 @@
     <ClInclude Include="InputSystem.h">
       <Filter>Header Files\InputSystem</Filter>
     </ClInclude>
+    <ClInclude Include="InputEvent.h">
+      <Filter>Header Files\InputSystem</Filter>
+    </ClInclude>
+    <ClInclude Include="KeyCode.h">
+      <Filter>Header Files\InputSystem</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="莉可丽丝1.bmp">
