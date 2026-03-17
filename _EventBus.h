@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <functional>
 #include <vector>
-
+#include "InputEvent.h"
 
 class _EventBus {
 	//使用单例模式
@@ -23,6 +23,8 @@ public:
 	// 发布播放音频事件（通知所有订阅者）
 	void publish_SoundPlay(const char* sound_path);
 
+	void subscribe_InputEvent(InputEvent_Handler handler);
+	void publish_InputEvent(const InputEvent& event);
 	// 其它事件订阅和发布函数，请像上面两个函数一样自行添加
 
 private:
@@ -30,5 +32,6 @@ private:
 	~_EventBus() = default;
 
 	std::vector<SoundPlay_Handler> handlers_SoundPlay;  // 所有播放音频事件订阅者，按理来说只有 音频系统 会订阅
+	std::vector<InputEvent_Handler> handlers_InputEvent;  //输入事件订阅者存放的容器
 	// 其它订阅者类型，请像上面一样自行添加
 };

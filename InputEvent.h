@@ -11,5 +11,5 @@ struct InputEvent {
 	InputType type;
 	KeyCode key;  //¼üÅÌ
 	int mouseX;     //Êó±êÎ»ÖÃ
-	int mouseX;
+	int mouseY;
 };
