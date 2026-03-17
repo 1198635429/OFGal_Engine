@@ -128,6 +128,7 @@
     <ClCompile Include="BMP_Reader.cpp" />
     <ClCompile Include="cmdDrawer.cpp" />
     <ClCompile Include="FileSystem.cpp" />
+    <ClCompile Include="Json_LevelData_ReadWrite.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ProjectStructureGetter.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />
@@ -137,12 +138,14 @@
     <CudaCompile Include="Pic2Pix.cu">
       <FileType>Document</FileType>
     </CudaCompile>
+    <None Include="packages.config" />
     <None Include="Pic2Pix.cuh" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h" />
     <ClInclude Include="cmdDrawer.h" />
     <ClInclude Include="FileSystem.h" />
+    <ClInclude Include="Json_LevelData_ReadWrite.h" />
     <ClInclude Include="ProjectStructureGetter.h" />
     <ClInclude Include="RenderingSystem.h" />
     <ClInclude Include="_EventBus.h" />
@@ -153,5 +156,12 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 13.0.targets" />
+    <Import Project="packages\nlohmann.json.3.12.0\build\native\nlohmann.json.targets" Condition="Exists('packages\nlohmann.json.3.12.0\build\native\nlohmann.json.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\nlohmann.json.3.12.0\build\native\nlohmann.json.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\nlohmann.json.3.12.0\build\native\nlohmann.json.targets'))" />
+  </Target>
 </Project>
