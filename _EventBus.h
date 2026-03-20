@@ -5,27 +5,27 @@
 
 
 class _EventBus {
-	//使用单例模式
+    //使用单例模式
 public:
-	_EventBus(const _EventBus&) = delete;
-	_EventBus& operator=(const _EventBus&) = delete;
+    _EventBus(const _EventBus&) = delete;
+    _EventBus& operator=(const _EventBus&) = delete;
 
-	static _EventBus& getInstance() {
-		static _EventBus instance;
-		return instance;
-	}
-	/*
-	==========================================
-	音频系统事件
-	==========================================
-	*/
-	using SoundPlay_Handler = std::function < bool(const char*) >;
-	/*
-	==========================================
-	文件系统事件
-	==========================================
-	*/
-	using ReadLevelData_Handler = std::function < LevelData(const std::string&) >;
+    static _EventBus& getInstance() {
+        static _EventBus instance;
+        return instance;
+    }
+    /*
+    ==========================================
+    音频系统事件
+    ==========================================
+    */
+    using SoundPlay_Handler = std::function < bool(const char*) >;
+    /*
+    ==========================================
+    文件系统事件
+    ==========================================
+    */
+    using ReadLevelData_Handler = std::function < LevelData(const std::string&) >;
     using WriteLevelData_Handler = std::function < bool(const std::string&, const LevelData&) >;
     using GetProjectStructure_Handler = std::function < ProjectStructure(const char*) >;
     using GetFolderStructure_Handler = std::function < FolderStructure(const char*) >;
@@ -34,19 +34,19 @@ public:
 
 
 
-	/*
-	==========================================
-	音频系统事件订阅与发布
-	==========================================
-	*/
-	void subscribe_SoundPlay(SoundPlay_Handler handler);
-	void publish_SoundPlay(const char* sound_path);
-	/*
-	==========================================
-	文件系统事件订阅与发布
-	==========================================
-	*/
-	void subscribe_ReadLevelData(ReadLevelData_Handler handler);
+    /*
+    ==========================================
+    音频系统事件订阅与发布
+    ==========================================
+    */
+    void subscribe_SoundPlay(SoundPlay_Handler handler);
+    void publish_SoundPlay(const char* sound_path);
+    /*
+    ==========================================
+    文件系统事件订阅与发布
+    ==========================================
+    */
+    void subscribe_ReadLevelData(ReadLevelData_Handler handler);
     void subscribe_WriteLevelData(WriteLevelData_Handler handler);
     void subscribe_GetProjectStructure(GetProjectStructure_Handler handler);
     void subscribe_GetFolderStructure(GetFolderStructure_Handler handler);
@@ -58,21 +58,21 @@ public:
     void publish_GetFolderStructure(const char* Directory);
 
 private:
-	_EventBus() = default;
-	~_EventBus() = default;
+    _EventBus() = default;
+    ~_EventBus() = default;
 
-	/*
-	==========================================
-	音频系统事件订阅者
-	==========================================
-	*/
-	std::vector<SoundPlay_Handler> handlers_SoundPlay;  // 所有播放音频事件订阅者，按理来说只有 音频系统 会订阅
-	/*
-	==========================================
-	文件系统事件订阅者
-	==========================================
-	*/
-	std::vector<ReadLevelData_Handler> handlers_ReadLevelData;
+    /*
+    ==========================================
+    音频系统事件订阅者
+    ==========================================
+    */
+    std::vector<SoundPlay_Handler> handlers_SoundPlay;  // 所有播放音频事件订阅者，按理来说只有 音频系统 会订阅
+    /*
+    ==========================================
+    文件系统事件订阅者
+    ==========================================
+    */
+    std::vector<ReadLevelData_Handler> handlers_ReadLevelData;
     std::vector<WriteLevelData_Handler> handlers_WriteLevelData;
     std::vector<GetProjectStructure_Handler> handlers_GetProjectStructure;
     std::vector<GetFolderStructure_Handler> handlers_GetFolderStructure;
