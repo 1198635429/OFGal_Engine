@@ -4,7 +4,7 @@
 #include "KeyCode.h"
 
 extern InputSystem g_inputSystem; 
-static KeyCode TranslateKey(WPARAM wParam) {
+static KeyCode TranslateKey(WPARAM wParam) {    //用于进行翻译工作
 	switch (wParam) {
 	case 'W':
 	case 'w':
@@ -22,7 +22,7 @@ static KeyCode TranslateKey(WPARAM wParam) {
 		return KeyCode::Unknown;
 	}
 }
-	LRESULT CALLBACK InputCollector::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	LRESULT CALLBACK InputCollector::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {    //用于进行输入的读取
 		InputEvent event{};
 			switch (msg) {
 			case WM_KEYDOWN:   //键盘按下
@@ -70,8 +70,5 @@ static KeyCode TranslateKey(WPARAM wParam) {
 				g_inputSystem.pushEvent(event);
 				break;
 			}
-		return DefWindowProc(hwnd, msg, wParam, lParam);
+			return DefWindowProc(hwnd, msg, wParam, lParam);    //返回的四个参数分别是：窗口句柄、消息类型、消息参数1、消息参数2
 	}
-
-
-}
