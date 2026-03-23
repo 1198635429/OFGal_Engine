@@ -8,6 +8,15 @@
 
 class FileSystem {
 public:
+
+    FileSystem(const FileSystem&) = delete;
+    FileSystem& operator=(const FileSystem&) = delete;
+    static FileSystem& getInstance()
+    {
+        static FileSystem instance;
+        return instance;
+    }
+
     // 场景文件读写接口(*.level)
     bool WriteLevelData(const std::string& filepath, const LevelData& data);
     LevelData ReadLevelData(const std::string& filepath);
@@ -23,4 +32,7 @@ public:
 private:
     ProjectStructure project_structure;
     std::string project_path;
+
+    FileSystem() = default;
+    ~FileSystem() = default;
 };
