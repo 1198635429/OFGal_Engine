@@ -132,6 +132,7 @@
     <ClCompile Include="BMP_Reader.cpp" />
     <ClCompile Include="cmdDrawer.cpp" />
     <ClCompile Include="FileSystem.cpp" />
+    <ClCompile Include="GameVM.cpp" />
     <ClCompile Include="Json_BPData_ReadWrite.cpp" />
     <ClCompile Include="Json_LevelData_ReadWrite.cpp" />
     <ClCompile Include="main.cpp" />
@@ -145,11 +146,13 @@
     </CudaCompile>
     <None Include="packages.config" />
     <None Include="Pic2Pix.cuh" />
+    <None Include="TestLevel1.level" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h" />
     <ClInclude Include="cmdDrawer.h" />
     <ClInclude Include="FileSystem.h" />
+    <ClInclude Include="GameVM.h" />
     <ClInclude Include="Json_BPData_ReadWrite.h" />
     <ClInclude Include="Json_LevelData_ReadWrite.h" />
     <ClInclude Include="ProjectStructureGetter.h" />

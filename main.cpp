@@ -3,9 +3,13 @@
 #include <iostream>
 #include "_EventBus.h"
 #include "FileSystem.h"
+#include "GameVM.h"
 #include "RenderingSystem.h"
 
 int main() {
+	_EventBus::getInstance();
+    FileSystem::getInstance();
+	GameVM::getInstance();
 	
 	system("pause");
 	return 0;

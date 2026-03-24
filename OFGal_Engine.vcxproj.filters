@@ -90,6 +90,9 @@
     <ClCompile Include="Json_BPData_ReadWrite.cpp">
       <Filter>Source Files\FileSystem</Filter>
     </ClCompile>
+    <ClCompile Include="GameVM.cpp">
+      <Filter>Source Files\GameVM</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h">
@@ -119,6 +122,9 @@
     <ClInclude Include="Json_BPData_ReadWrite.h">
       <Filter>Header Files\FileSystem</Filter>
     </ClInclude>
+    <ClInclude Include="GameVM.h">
+      <Filter>Header Files\GameVM</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="莉可丽丝1.bmp">
@@ -130,6 +136,9 @@
       <Filter>Header Files\CUDA_SpeedUp</Filter>
     </None>
     <None Include="packages.config" />
+    <None Include="TestLevel1.level">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Pic2Pix.cu">

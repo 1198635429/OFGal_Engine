@@ -55,12 +55,12 @@ public:
     void subscribe_ReadBMP(ReadBMP_Handler handler);
     void subscribe_ReadBPData(ReadBPData_Handler handler);
     void subscribe_WriteBPData(WriteBPData_Handler handler);
-    void publish_ReadBMP(const char* filepath);
+    BMP_Data publish_ReadBMP(const char* filepath);
     void publish_WriteLevelData(const std::string& filepath, const LevelData& data);
-    void publish_ReadLevelData(const std::string& filepath);
-    void publish_GetProjectStructure(const char* RootDirectory);
-    void publish_GetFolderStructure(const char* Directory);
-    void publish_ReadBPData(const std::string& filepath);
+    LevelData publish_ReadLevelData(const std::string& filepath);
+    ProjectStructure publish_GetProjectStructure(const char* RootDirectory);
+    FolderStructure publish_GetFolderStructure(const char* Directory);
+    BlueprintData publish_ReadBPData(const std::string& filepath);
     void publish_WriteBPData(const std::string& filepath, const BlueprintData& data);
 
 private:

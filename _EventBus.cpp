@@ -22,44 +22,44 @@ void _EventBus::subscribe_SoundPlay(SoundPlay_Handler handler)
 文件系统事件订阅与发布
 ==========================================
 */
-void _EventBus::publish_GetFolderStructure(const char* Directory)
+FolderStructure _EventBus::publish_GetFolderStructure(const char* Directory)
 {
     for (auto& handler : handlers_GetFolderStructure)
     {
-        handler(Directory);
+        return handler(Directory);
     }
 }
 void _EventBus::subscribe_GetFolderStructure(GetFolderStructure_Handler handler)
 {
     handlers_GetFolderStructure.push_back(handler);
 }
-void _EventBus::publish_GetProjectStructure(const char* RootDirectory)
+ProjectStructure _EventBus::publish_GetProjectStructure(const char* RootDirectory)
 {
     for (auto& handler : handlers_GetProjectStructure)
     {
-        handler(RootDirectory);
+        return handler(RootDirectory);
     }
 }
 void _EventBus::subscribe_GetProjectStructure(GetProjectStructure_Handler handler)
 {
     handlers_GetProjectStructure.push_back(handler);
 }
-void _EventBus::publish_ReadBMP(const char* filepath)
+BMP_Data _EventBus::publish_ReadBMP(const char* filepath)
 {
     for (auto& handler : handlers_ReadBMP)
     {
-        handler(filepath);
+        return handler(filepath);
     }
 }
 void _EventBus::subscribe_ReadBMP(ReadBMP_Handler handler)
 {
     handlers_ReadBMP.push_back(handler);
 }
-void _EventBus::publish_ReadLevelData(const std::string& filepath)
+LevelData _EventBus::publish_ReadLevelData(const std::string& filepath)
 {
     for (auto& handler : handlers_ReadLevelData)
     {
-        handler(filepath);
+        return handler(filepath);
     }
 }
 void _EventBus::subscribe_ReadLevelData(ReadLevelData_Handler handler)
@@ -88,11 +88,11 @@ void _EventBus::subscribe_WriteBPData(WriteBPData_Handler handler)
 {
     handlers_WriteBPData.push_back(handler);
 }
-void _EventBus::publish_ReadBPData(const std::string& filepath)
+BlueprintData _EventBus::publish_ReadBPData(const std::string& filepath)
 {
     for (auto& handler : handlers_ReadBPData)
     {
-        handler(filepath);
+        return handler(filepath);
     }
 }
 void _EventBus::subscribe_ReadBPData(ReadBPData_Handler handler)
