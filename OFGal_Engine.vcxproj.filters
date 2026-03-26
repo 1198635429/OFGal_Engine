@@ -125,6 +125,15 @@
     <ClInclude Include="GameVM.h">
       <Filter>Header Files\GameVM</Filter>
     </ClInclude>
+    <ClInclude Include="SRP.cuh">
+      <Filter>Header Files\CUDA_SpeedUp</Filter>
+    </ClInclude>
+    <ClInclude Include="PPRP.cuh">
+      <Filter>Header Files\CUDA_SpeedUp</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameProcessing.cuh">
+      <Filter>Header Files\CUDA_SpeedUp</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="莉可丽丝1.bmp">
@@ -142,6 +151,15 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Pic2Pix.cu">
+      <Filter>Source Files\CUDA_SpeedUp</Filter>
+    </CudaCompile>
+    <CudaCompile Include="SRP.cu">
+      <Filter>Source Files\CUDA_SpeedUp</Filter>
+    </CudaCompile>
+    <CudaCompile Include="PPRP.cu">
+      <Filter>Source Files\CUDA_SpeedUp</Filter>
+    </CudaCompile>
+    <CudaCompile Include="FrameProcessing.cu">
       <Filter>Source Files\CUDA_SpeedUp</Filter>
     </CudaCompile>
   </ItemGroup>

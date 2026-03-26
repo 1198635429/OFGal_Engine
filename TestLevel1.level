@@ -1,6 +1,8 @@
 ﻿{
 	"TestLevel1": {
+		"SubObjects": [ "background", "AjitaniHifumi" ],
 		"background": {
+			"ParObject" : "TestLevel1",
 			"Transform": {
 				"Location": {
 					"x": 0.0,
@@ -32,6 +34,7 @@
 			}
 		},
 		"AjitaniHifumi": {
+			"ParObject": "TestLevel1",
 			"Transform": {
 				"Location": {
 					"x": 0.0,

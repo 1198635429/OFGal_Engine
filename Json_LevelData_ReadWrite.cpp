@@ -119,13 +119,6 @@ void from_json(const json& j, BlueprintComponent& v) {
 	j.at("Path").get_to(v.Path);
 }
 
-void to_json(json& j, const SetComponent& v) {
-	j = json{ {"Sub objects", v.Sub_objects} };
-}
-void from_json(const json& j, SetComponent& v) {
-	j.at("Sub objects").get_to(v.Sub_objects);
-}
-
 // ========== 对象序列化 ==========
 void to_json(json& j, const ObjectData& v) {
 	if (!v.parent.empty()) j["ParObject"] = v.parent;

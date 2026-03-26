@@ -107,10 +107,6 @@ struct BlueprintComponent {
 	std::string Path;
 };
 
-struct SetComponent {
-	std::vector<std::string> Sub_objects;
-};
-
 #ifndef __CUDACC__  // 以下内容仅在主机编译时可见
 struct ObjectData {
 	std::string parent;

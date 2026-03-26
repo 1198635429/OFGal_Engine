@@ -36,8 +36,6 @@ void to_json(json& j, const TriggerAreaComponent& v);
 void from_json(const json& j, TriggerAreaComponent& v);
 void to_json(json& j, const BlueprintComponent& v);
 void from_json(const json& j, BlueprintComponent& v);
-void to_json(json& j, const SetComponent& v);
-void from_json(const json& j, SetComponent& v);
 void to_json(json& j, const ObjectData& v);
 void from_json(const json& j, ObjectData& v);
 void to_json(json& j, const LevelData& v);

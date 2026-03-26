@@ -141,9 +141,12 @@
     <ClCompile Include="_EventBus.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="FrameProcessing.cu" />
     <CudaCompile Include="Pic2Pix.cu">
       <FileType>Document</FileType>
     </CudaCompile>
+    <CudaCompile Include="PPRP.cu" />
+    <CudaCompile Include="SRP.cu" />
     <None Include="packages.config" />
     <None Include="Pic2Pix.cuh" />
     <None Include="TestLevel1.level" />
@@ -152,12 +155,15 @@
     <ClInclude Include="BMP_Reader.h" />
     <ClInclude Include="cmdDrawer.h" />
     <ClInclude Include="FileSystem.h" />
+    <ClInclude Include="FrameProcessing.cuh" />
     <ClInclude Include="GameVM.h" />
     <ClInclude Include="Json_BPData_ReadWrite.h" />
     <ClInclude Include="Json_LevelData_ReadWrite.h" />
+    <ClInclude Include="PPRP.cuh" />
     <ClInclude Include="ProjectStructureGetter.h" />
     <ClInclude Include="RenderingSystem.h" />
     <ClInclude Include="SharedTypes.h" />
+    <ClInclude Include="SRP.cuh" />
     <ClInclude Include="_EventBus.h" />
   </ItemGroup>
   <ItemGroup>
