@@ -1,13 +1,16 @@
 ﻿// Copyright 2026 MrSeagull. All Rights Reserved.
 #include "cmdDrawer.h"
 #include <iostream>
-#include <vector>
 #include <algorithm>
+#include <string>
+#include <Psapi.h>
+#pragma comment(lib, "Psapi.lib")
 
-// 快速整数转字符串表（0-255）
+// ---------- 内部辅助结构 ----------
 namespace {
+	// 快速整数转字符串表（0-255）
 	struct FastIntTable {
-		char str[256][4];  // 最多3位数字+'\0'
+		char str[256][4];
 		int len[256];
 		FastIntTable() {
 			for (int i = 0; i < 256; ++i) {
@@ -33,109 +36,130 @@ namespace {
 		}
 	};
 	const FastIntTable g_intTable;
+
+	HANDLE g_hConsole = INVALID_HANDLE_VALUE;
+	HANDLE g_hStdin = INVALID_HANDLE_VALUE;
+	WORD g_originalAttributes = 0;
+	DWORD g_originalInputMode = 0;
+	bool g_initialized = false;
+	Size2DInt g_maxCanvasSize = { 0, 0 };
+
+	bool enableVTMode() {
+		DWORD dwMode = 0;
+		if (!GetConsoleMode(g_hConsole, &dwMode)) return false;
+		dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+		return SetConsoleMode(g_hConsole, dwMode);
+	}
+
+	bool isWindowsTerminal() {
+		HWND hwnd = GetConsoleWindow();
+		if (!hwnd) return false;
+		DWORD pid = 0;
+		GetWindowThreadProcessId(hwnd, &pid);
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+		if (!hProcess) return false;
+		wchar_t path[MAX_PATH];
+		if (GetModuleFileNameExW(hProcess, NULL, path, MAX_PATH)) {
+			std::wstring procPath(path);
+			size_t pos = procPath.find_last_of(L"\\");
+			if (pos != std::wstring::npos) {
+				std::wstring fileName = procPath.substr(pos + 1);
+				if (_wcsicmp(fileName.c_str(), L"WindowsTerminal.exe") == 0) {
+					CloseHandle(hProcess);
+					return true;
+				}
+			}
+		}
+		CloseHandle(hProcess);
+		return false;
+	}
 }
 
-CmdDrawer::CmdDrawer()
-	: hConsole(GetStdHandle(STD_OUTPUT_HANDLE))
-	, hStdin(GetStdHandle(STD_INPUT_HANDLE))
-	, originalAttributes(0)
-	, originalInputMode(0)
-	, initialized(false) {
-}
+bool initializeConsoleDrawer() {
+	if (g_initialized) return true;
 
-CmdDrawer::~CmdDrawer() {
-	shutdown();
-}
+	if (isWindowsTerminal()) return false;
 
-bool CmdDrawer::enableVTMode() {
-	DWORD dwMode = 0;
-	if (!GetConsoleMode(hConsole, &dwMode)) return false;
-	dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	return SetConsoleMode(hConsole, dwMode);
-}
-
-bool CmdDrawer::initialize() {
-	if (initialized) return true;
-
-	// 检查句柄有效性
-	if (hConsole == INVALID_HANDLE_VALUE || hStdin == INVALID_HANDLE_VALUE) {
-		OutputDebugStringA("获取控制台句柄失败。错误码：" + GetLastError());
+	g_hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	g_hStdin = GetStdHandle(STD_INPUT_HANDLE);
+	if (g_hConsole == INVALID_HANDLE_VALUE || g_hStdin == INVALID_HANDLE_VALUE) {
+		std::string msg = "获取控制台句柄失败。错误码：" + std::to_string(GetLastError());
+		OutputDebugStringA(msg.c_str());
 		return false;
 	}
 
-	// 保存原始控制台属性
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+	if (!GetConsoleScreenBufferInfo(g_hConsole, &csbi)) {
 		OutputDebugStringA("获取控制台信息失败");
 		return false;
 	}
-	originalAttributes = csbi.wAttributes;
+	g_originalAttributes = csbi.wAttributes;
 
-	// 保存原始输入模式（用于恢复快速编辑模式）
-	if (!GetConsoleMode(hStdin, &originalInputMode)) {
+	if (!GetConsoleMode(g_hStdin, &g_originalInputMode)) {
 		OutputDebugStringA("获取输入模式失败");
 		return false;
 	}
 
-	// 设置字体为 Consolas，大小 1x1
 	CONSOLE_FONT_INFOEX cfi;
 	cfi.cbSize = sizeof(CONSOLE_FONT_INFOEX);
-	if (GetCurrentConsoleFontEx(hConsole, FALSE, &cfi)) {
+	if (GetCurrentConsoleFontEx(g_hConsole, FALSE, &cfi)) {
 		cfi.dwFontSize.X = 1;
 		cfi.dwFontSize.Y = 1;
 		cfi.FontFamily = FF_DONTCARE;
 		cfi.FontWeight = FW_NORMAL;
 		wcscpy_s(cfi.FaceName, L"Consolas");
-		SetCurrentConsoleFontEx(hConsole, FALSE, &cfi);
+		SetCurrentConsoleFontEx(g_hConsole, FALSE, &cfi);
 	}
 
-	// 最大化窗口
 	HWND hwnd = GetConsoleWindow();
 	if (hwnd) ShowWindow(hwnd, SW_MAXIMIZE);
-	Sleep(100); // 等待窗口调整
+	Sleep(100);
 
-	// 获取窗口尺寸并设置缓冲区等于窗口大小
-	GetConsoleScreenBufferInfo(hConsole, &csbi);
+	if (hwnd) {
+		LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+		style &= ~(WS_MAXIMIZEBOX | WS_THICKFRAME);
+		SetWindowLongPtr(hwnd, GWL_STYLE, style);
+		SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+	}
+
+	GetConsoleScreenBufferInfo(g_hConsole, &csbi);
 	SHORT windowWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 	SHORT windowHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 	COORD newBufferSize = { windowWidth, windowHeight };
-	SetConsoleScreenBufferSize(hConsole, newBufferSize);
+	SetConsoleScreenBufferSize(g_hConsole, newBufferSize);
 
-	// 启用 VT 模式
+	g_maxCanvasSize.x = windowWidth;
+	g_maxCanvasSize.y = windowHeight;
+
 	if (!enableVTMode()) {
 		OutputDebugStringA("启用 VT 模式失败");
 		return false;
 	}
 
-	// 禁用快速编辑模式（避免鼠标点击暂停程序）
-	DWORD newMode = originalInputMode;
+	DWORD newMode = g_originalInputMode;
 	newMode |= ENABLE_EXTENDED_FLAGS;
 	newMode &= ~ENABLE_QUICK_EDIT_MODE;
-	SetConsoleMode(hStdin, newMode);
+	SetConsoleMode(g_hStdin, newMode);
 
-	initialized = true;
+	g_initialized = true;
 	return true;
 }
 
-void CmdDrawer::draw(const BMP_Data& bmp) {
-	if (!initialized) {
-		OutputDebugStringA("绘图器未初始化，请先调用 initialize()");
+Size2DInt getMaxCanvasSize() {
+	return g_maxCanvasSize;
+}
+
+void drawFrame(const Frame& frame) {
+	if (!g_initialized) {
+		OutputDebugStringA("绘图器未初始化，请先调用 initializeConsoleDrawer()");
 		return;
 	}
 
-	// 获取当前控制台缓冲区尺寸
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	GetConsoleScreenBufferInfo(hConsole, &csbi);
-	COORD bufferSize = csbi.dwSize;
+	int drawWidth = frame.width;
+	int drawHeight = frame.height;
 
-	// 计算可绘制的最大区域
-	int drawWidth = std::min(bmp.width, static_cast<int>(bufferSize.X));
-	int drawHeight = std::min(bmp.height, static_cast<int>(bufferSize.Y));
+	SetConsoleCursorPosition(g_hConsole, COORD{ 0, 0 });
 
-	// 光标置顶
-	SetConsoleCursorPosition(hConsole, COORD{ 0, 0 });
-
-	// 行缓冲区（最坏情况：每个像素颜色不同，每像素约20字节 + 换行符）
 	std::vector<char> lineBuffer(drawWidth * 20 + 2);
 	char* lineBufferPtr = lineBuffer.data();
 
@@ -144,10 +168,9 @@ void CmdDrawer::draw(const BMP_Data& bmp) {
 		int lastR = -1, lastG = -1, lastB = -1;
 
 		for (int x = 0; x < drawWidth; ++x) {
-			const auto& pixel = bmp.pixels[y * bmp.width + x];
+			const auto& pixel = frame.pixels[y * drawWidth + x];
 
-			// 如果颜色变化，输出新的背景色转义序列
-			if (pixel.red != lastR || pixel.green != lastG || pixel.blue != lastB) {
+			if (pixel.Red != lastR || pixel.Green != lastG || pixel.Blue != lastB) {
 				*p++ = '\x1b';
 				*p++ = '[';
 				*p++ = '4';
@@ -156,48 +179,39 @@ void CmdDrawer::draw(const BMP_Data& bmp) {
 				*p++ = '2';
 				*p++ = ';';
 
-				// 红色
-				memcpy(p, g_intTable.str[pixel.red], g_intTable.len[pixel.red]);
-				p += g_intTable.len[pixel.red];
+				memcpy(p, g_intTable.str[pixel.Red], g_intTable.len[pixel.Red]);
+				p += g_intTable.len[pixel.Red];
 				*p++ = ';';
 
-				// 绿色
-				memcpy(p, g_intTable.str[pixel.green], g_intTable.len[pixel.green]);
-				p += g_intTable.len[pixel.green];
+				memcpy(p, g_intTable.str[pixel.Green], g_intTable.len[pixel.Green]);
+				p += g_intTable.len[pixel.Green];
 				*p++ = ';';
 
-				// 蓝色
-				memcpy(p, g_intTable.str[pixel.blue], g_intTable.len[pixel.blue]);
-				p += g_intTable.len[pixel.blue];
+				memcpy(p, g_intTable.str[pixel.Blue], g_intTable.len[pixel.Blue]);
+				p += g_intTable.len[pixel.Blue];
 
 				*p++ = 'm';
 
-				lastR = pixel.red;
-				lastG = pixel.green;
-				lastB = pixel.blue;
+				lastR = pixel.Red;
+				lastG = pixel.Green;
+				lastB = pixel.Blue;
 			}
-			*p++ = ' ';  // 输出空格作为“像素”
+			*p++ = ' ';
 		}
-		*p++ = '\n';     // 换行
+		*p++ = '\n';
 
-		// 写入一行到控制台
 		DWORD written;
-		WriteFile(hConsole, lineBufferPtr, static_cast<DWORD>(p - lineBufferPtr), &written, nullptr);
+		WriteFile(g_hConsole, lineBufferPtr, static_cast<DWORD>(p - lineBufferPtr), &written, nullptr);
 	}
 
-	// 恢复默认颜色
 	printf("\x1b[0m");
-	// 同时恢复原始控制台属性（虽然 VT 已经重置颜色，但保留以确保完全恢复）
-	SetConsoleTextAttribute(hConsole, originalAttributes);
+	SetConsoleTextAttribute(g_hConsole, g_originalAttributes);
 }
 
-void CmdDrawer::shutdown() {
-	if (initialized) {
-		// 恢复原始控制台属性
-		SetConsoleTextAttribute(hConsole, originalAttributes);
-		// 恢复原始输入模式（如快速编辑）
-		SetConsoleMode(hStdin, originalInputMode);
-		// 可选：恢复原始字体？一般不需要，退出后控制台会重置
-		initialized = false;
+void shutdownConsoleDrawer() {
+	if (g_initialized) {
+		SetConsoleTextAttribute(g_hConsole, g_originalAttributes);
+		SetConsoleMode(g_hStdin, g_originalInputMode);
+		g_initialized = false;
 	}
 }

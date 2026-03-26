@@ -113,12 +113,13 @@ struct SetComponent {
 
 #ifndef __CUDACC__  // 以下内容仅在主机编译时可见
 struct ObjectData {
+	std::string parent;
+	std::vector<std::string> children;
 	std::optional<TransformComponent> Transform;
 	std::optional<PictureComponent> Picture;
 	std::optional<TextblockComponent> Textblock;
 	std::optional<TriggerAreaComponent> TriggerArea;
 	std::optional<BlueprintComponent> Blueprint;
-	std::optional<SetComponent> Set;
 };
 
 // 场景结构
@@ -190,3 +191,18 @@ struct BlueprintData {
 	std::vector<Link> links;
 };
 #endif
+/*
+=================================================
+渲染系统结构体定义
+=================================================
+*/
+struct StdPixel {
+	unsigned char Red;
+	unsigned char Green;
+	unsigned char Blue;
+};
+struct Frame {
+	int width;
+	int height;
+	std::vector<StdPixel> pixels;
+};

@@ -128,35 +128,53 @@ void from_json(const json& j, SetComponent& v) {
 
 // ========== 对象序列化 ==========
 void to_json(json& j, const ObjectData& v) {
+	if (!v.parent.empty()) j["ParObject"] = v.parent;
+	if (!v.children.empty()) j["SubObjects"] = v.children;
 	if (v.Transform) j["Transform"] = *v.Transform;
 	if (v.Picture) j["Picture"] = *v.Picture;
 	if (v.Textblock) j["Textblock"] = *v.Textblock;
 	if (v.TriggerArea) j["TriggerArea"] = *v.TriggerArea;
 	if (v.Blueprint) j["Blueprint"] = *v.Blueprint;
-	if (v.Set) j["Set"] = *v.Set;
 }
 
 void from_json(const json& j, ObjectData& v) {
+	if (j.contains("ParObject")) j.at("ParObject").get_to(v.parent);
+	if (j.contains("SubObjects")) j.at("SubObjects").get_to(v.children);
 	if (j.contains("Transform")) j.at("Transform").get_to(v.Transform.emplace());
 	if (j.contains("Picture")) j.at("Picture").get_to(v.Picture.emplace());
 	if (j.contains("Textblock")) j.at("Textblock").get_to(v.Textblock.emplace());
 	if (j.contains("TriggerArea")) j.at("TriggerArea").get_to(v.TriggerArea.emplace());
 	if (j.contains("Blueprint")) j.at("Blueprint").get_to(v.Blueprint.emplace());
-	if (j.contains("Set")) j.at("Set").get_to(v.Set.emplace());
 }
 
 // ========== 场景序列化 ==========
 void to_json(json& j, const LevelData& v) {
-	j = json{ {v.name, v.objects} };  // 场景名作为顶层键
+	json levelObj;
+	// 收集根对象（父对象为场景名的对象）
+	std::vector<std::string> rootObjects;
+	for (const auto& [name, obj] : v.objects) {
+		if (obj.parent == v.name) {
+			rootObjects.push_back(name);
+		}
+	}
+	if (!rootObjects.empty()) levelObj["SubObjects"] = rootObjects;
+	for (const auto& [name, obj] : v.objects) {
+		levelObj[name] = obj;
+	}
+	j = json{ {v.name, levelObj} };
 }
 
 void from_json(const json& j, LevelData& v) {
-	if (j.size() != 1) {
-		throw std::runtime_error("Level JSON must have exactly one top-level key (level name)");
-	}
+	if (j.size() != 1) throw std::runtime_error("Level JSON must have exactly one top-level key (level name)");
 	auto it = j.begin();
 	v.name = it.key();
-	it.value().get_to(v.objects);
+	const json& levelObj = it.value();
+
+	// 解析所有对象（包括可能的 SubObjects 列表）
+	for (auto& [objName, objJson] : levelObj.items()) {
+		if (objName == "SubObjects") continue;  // 跳过根对象列表，不当作对象数据
+		v.objects[objName] = objJson.get<ObjectData>();
+	}
 }
 
 // ========== 文件读写 ==========

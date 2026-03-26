@@ -10,6 +10,7 @@ int main() {
 	_EventBus::getInstance();
     FileSystem::getInstance();
 	GameVM::getInstance();
+	RenderingSystem::getInstance();
 	
 	system("pause");
 	return 0;

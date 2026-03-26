@@ -6,14 +6,14 @@
 ```mermaid
 graph LR;
 Z[项目Project]-->A[场景Level1]
-A[场景Level1]-->B[对象Object1]
-A[场景Level1]-->D[对象Object2]
+A[场景Level1]-->|有子对象|B[对象Object1]
+A[场景Level1]-->|有子对象|D[对象Object2]
 B[对象Object1]-->C[组件Component1]
 B[对象Object1]-->E[组件Component2]
 D[对象Object2]-->F[组件Component1]
 D[对象Object2]-->G[组件Component2]
 D[对象Object2]-->H[组件Component3]
-H[组件Component3]-->|通过Set组件包含|I[对象Object3]
+D[对象Object2]-->|有子对象|I[对象Object3]
 I[对象Object3]-->J[...]
 ```
 ## 具体数据结构
@@ -30,6 +30,7 @@ A[Object1]-->G[Set组件]
 ```json
 {
   "NameOfLevel" : { 	//以下只写了对象的名字，实际结构包含完整对象数据
+      		"SubObjects" : ["o1","o2"]	//string[]，以子对象的名字为元素
   			"NameOfObject1" : {
                 //......
             },
@@ -40,6 +41,8 @@ A[Object1]-->G[Set组件]
 ```json
 {
   "NameOfObject1" : { 	//以下只写了组件的名字，实际结构包含完整组件数据
+      		"ParObject" : "NameOfLevel",	//string，表示父对象的名字，此处以场景为父对象
+      		"SubObjects" : ["o1","o2"],	//string[]，以子对象的名字为元素
   			"Transform" : {
                 //......
             },
@@ -131,13 +134,5 @@ A[Object1]-->G[Set组件]
   "Blueprint" : { 
   				"Path" : ".\Pic\123.bp"	//string，相对项目根目录的相对路径
   }
-}
-```
-### Set
-```json
-{
-  "Set" : { 
-  			"Sub objects" : ["o1","o2"]	//string[]，以子对象的名字为元素
-  	}
 }
 ```
