@@ -8,10 +8,10 @@
 __device__ float cubicWeight(float x) {
     float ax = fabsf(x);
     if (ax <= 1.0f) {
-        return (1.5f * ax - 2.5f) * ax * ax + 1.0f;   // (a+2)|x|^3 - (a+3)|x|^2 + 1, a=-0.5 => 1.5|x|^3-2.5|x|^2+1
+        return (1.5f * ax - 2.5f) * ax * ax + 1.0f;
     }
     else if (ax < 2.0f) {
-        return ((-0.5f * ax + 2.5f) * ax - 4.0f) * ax + 2.0f; // a|x|^3-5a|x|^2+8a|x|-4a, a=-0.5 => -0.5|x|^3+2.5|x|^2-4|x|+2
+        return ((-0.5f * ax + 2.5f) * ax - 4.0f) * ax + 2.0f;
     }
     else {
         return 0.0f;
@@ -19,7 +19,7 @@ __device__ float cubicWeight(float x) {
 }
 
 // 双三次插值内核
-__global__ void resizeKernel(const BMP_Pixel* src, int srcWidth, int srcHeight,
+__global__ void resizeBicubicKernel(const BMP_Pixel* src, int srcWidth, int srcHeight,
     BMP_Pixel* dst, int dstWidth, int dstHeight) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -78,7 +78,7 @@ __global__ void resizeKernel(const BMP_Pixel* src, int srcWidth, int srcHeight,
 }
 
 // 主机端函数：将源图像缩放到目标尺寸
-extern "C" BMP_Data ForceResizeImage(const BMP_Data& src, const Size2DInt& dstSize) {
+extern "C" BMP_Data ForceResizeImage_Bicubic(const BMP_Data& src, const Size2DInt& dstSize) {
     BMP_Data dst;
     dst.width = dstSize.x;
     dst.height = dstSize.y;
@@ -106,7 +106,7 @@ extern "C" BMP_Data ForceResizeImage(const BMP_Data& src, const Size2DInt& dstSi
         (dst.height + blockSize.y - 1) / blockSize.y);
 
     // 启动内核
-    resizeKernel << <gridSize, blockSize >> > (d_src, src.width, src.height,
+    resizeBicubicKernel << <gridSize, blockSize >> > (d_src, src.width, src.height,
         d_dst, dst.width, dst.height);
 
     // 拷贝结果回主机

@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-    BMP_Data ForceResizeImage(const BMP_Data& src, const Size2DInt& dstSize);
+    BMP_Data ForceResizeImage_Bicubic(const BMP_Data& src, const Size2DInt& dstSize);
 
 #ifdef __cplusplus
 }

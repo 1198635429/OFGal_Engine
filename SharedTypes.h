@@ -203,9 +203,17 @@ struct Frame {
 	int height;
 	std::vector<StdPixel> pixels;
 };
+struct Matrix3D {
+	float m[3][3] = { 0 };
+	float(&operator[](int i))[3] {
+			return m[i];
+	}
+	const float(&operator[](int i) const)[3] {
+		return m[i];
+	}
+};
 struct RenderData {
-	float trans[3][3] = { 0 };
-	float inverse_trans[3][3] = { 0 };
+	Matrix3D trans, inverse_trans;
 	Location2D points[4];
 	BMP_Data texture;
 	int depth = 0;

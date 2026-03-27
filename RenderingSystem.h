@@ -11,6 +11,7 @@
 class RenderingSystem {
 
     Size2DInt CanvasSize;       //最大画布大小
+    std::vector<RenderData> RenderObjects;
 
 public:
     RenderingSystem(const RenderingSystem&) = delete;
@@ -19,11 +20,11 @@ public:
         static RenderingSystem instance;
         return instance;
     }
-    Frame Render_A_Frame_SRP(const LevelData& level);
-    bool Print_A_Frame(const Frame& frame);
 private:
     RenderingSystem() {
         CanvasSize = getMaxCanvasSize();
     }
     ~RenderingSystem() = default;
+
+    void RefreshRenderObjects(const LevelData& currentLevel);
 };
