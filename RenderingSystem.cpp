@@ -1,12 +1,17 @@
 ﻿// Copyright 2026 MrSeagull. All Rights Reserved.
 #include "RenderingSystem.h"
-
-// 辅助函数：根据 TransformComponent 构造局部变换矩阵（3x3 齐次矩阵，支持平移、旋转、缩放）
-// 具体实现由用户完成，此处仅提供接口
+#include <numbers>
+#include <filesystem>
+constexpr double pi = std::numbers::pi;
 static Matrix3D ComputeLocalMatrix(const TransformComponent& transform) {
-    Matrix3D mat; // 应返回单位矩阵，待实现
-    // TODO: 根据 transform.Location (x,y), transform.Rotation.r (角度), transform.Scale (x,y) 构造矩阵
-    // 建议矩阵形式为 [sx*cosθ, -sy*sinθ, tx; sx*sinθ, sy*cosθ, ty; 0, 0, 1]
+    Matrix3D mat; // 默认构造单位矩阵
+    float rad = transform.Rotation.r * pi / 180.0f;
+    mat[0][0] = transform.Scale.x * cos(rad);
+    mat[0][1] = -transform.Scale.y * sin(rad);
+    mat[0][2] = transform.Location.x;
+    mat[1][0] = transform.Scale.x * sin(rad);
+    mat[1][1] = transform.Scale.y * cos(rad);
+    mat[1][2] = transform.Location.y;
     return mat;
 }
 
@@ -14,51 +19,82 @@ static Matrix3D ComputeLocalMatrix(const TransformComponent& transform) {
 static void TraverseObject(
     ObjectData* obj,
     const Matrix3D& parentWorld,
+    int parentDepth,
     std::vector<RenderData>& outRenderObjects)
 {
     if (!obj) return;
 
-    // 1. 计算当前对象的世界矩阵
+    // 计算当前对象的世界矩阵和累积深度
     Matrix3D world = parentWorld;
+    int depth = parentDepth;
+
     if (obj->Transform.has_value()) {
-        Matrix3D local = ComputeLocalMatrix(obj->Transform.value());
-        // 矩阵乘法：world = parentWorld * local （取决于坐标系的定义，通常子级变换左乘父级）
-        // 需要根据实际矩阵乘法实现，此处假设重载了 * 或使用函数
-        // world = parentWorld * local;   // 待实现
-    }
+        const auto& trans = obj->Transform.value();
+        Matrix3D local = ComputeLocalMatrix(trans);
+        world = parentWorld * local;
+        depth = parentDepth + trans.Location.z;   // 累积深度
 
-    // 2. 如果对象含有 Picture 组件，生成渲染数据
-    if (obj->Picture.has_value()) {
-        RenderData renderData;
-        renderData.trans = world;               // 世界变换矩阵
-        // renderData.inverse_trans = world.Inverse(); // 逆矩阵，后续计算
-        // 从 Picture 组件获取纹理路径、局部偏移、尺寸等信息
-        const auto& pic = obj->Picture.value();
-        // TODO: 加载图片数据到 renderData.texture（BMP_Data）
-        // TODO: 根据 pic.Location 和 pic.Size 计算四个角点（局部坐标），再通过世界矩阵转换到世界坐标
-        // 此处简化：points 留待后续计算
-        // renderData.depth = pic.Location.z;    // 深度用于排序
-        outRenderObjects.push_back(renderData);
-    }
+        // 如果对象含有 Picture 组件，生成渲染数据
+        if (obj->Picture.has_value() && std::filesystem::exists(obj->Picture->Path)) {
+            const auto& pic = obj->Picture.value();
 
-    // 3. 递归处理子对象
+            // 1. 加载纹理
+            BMP_Data texture = _EventBus::getInstance().publish_ReadBMP(pic.Path.c_str());
+
+            // 2. 确定实际渲染尺寸（原始纹理尺寸 vs 指定视窗尺寸）
+            int imgWidth = texture.width;
+            int imgHeight = texture.height;
+            if (pic.Size.x > 0) imgWidth = static_cast<int>(pic.Size.x);
+            if (pic.Size.y > 0) imgHeight = static_cast<int>(pic.Size.y);
+
+            // 3. 图片局部坐标系中的四个角点（单位矩形，未应用 Picture 的变换）
+            Vector3D localPoints[4] = {
+                {0.0f, 0.0f, 1.0f},
+                {static_cast<float>(imgWidth - 1), 0.0f, 1.0f},
+                {static_cast<float>(imgWidth - 1), static_cast<float>(imgHeight - 1), 1.0f},
+                {0.0f, static_cast<float>(imgHeight - 1), 1.0f}
+            };
+
+            // 4. 为 Picture 组件构建局部变换矩阵（先缩放/旋转/平移）
+            float rad = pic.Rotation.r * pi / 180.0f;
+            Matrix3D picLocal;
+            picLocal[0][0] = cos(rad);   // 旋转（假设无缩放）
+            picLocal[0][1] = -sin(rad);
+            picLocal[1][0] = sin(rad);
+            picLocal[1][1] = cos(rad);
+            picLocal[0][2] = pic.Location.x;
+            picLocal[1][2] = pic.Location.y;
+
+            // 5. 组合变换：世界变换 × Picture 局部变换
+            Matrix3D finalTransform = world * picLocal;
+
+            // 6. 生成 RenderData
+            RenderData renderData;
+            renderData.trans = finalTransform;
+            renderData.depth = depth;
+            renderData.texture = std::move(texture);
+
+            // 变换四个角点到世界坐标
+            for (int i = 0; i < 4; ++i) {
+                renderData.points[i] = finalTransform * localPoints[i];
+            }
+
+            renderData.inverse_trans = finalTransform.inverse();
+            outRenderObjects.push_back(std::move(renderData));
+        }
+    }
+    // 递归子对象
     for (auto& [childName, childObj] : obj->objects) {
-        TraverseObject(childObj, world, outRenderObjects);
+        TraverseObject(childObj, world, depth, outRenderObjects);
     }
 }
 
-void RenderingSystem::RefreshRenderObjects(const LevelData& currentLevel) {
+void RenderingSystem::RefreshRenderObjects(const LevelData & currentLevel) {
     RenderObjects.clear();
-
-    // 场景根对象：所有直接属于 LevelData 的对象，其父对象为 nullptr
-    Matrix3D identity; // 单位矩阵，需确保默认构造为单位阵，当前 Matrix3D 默认构造为 0，需要修正
-    // 暂时手动设置为单位矩阵
-    // identity.m[0][0] = 1; identity.m[1][1] = 1; identity.m[2][2] = 1;  // 待实现
-
+    Matrix3D identity;
     for (const auto& [objName, objPtr] : currentLevel.objects) {
-        // 场景根对象的父指针为 nullptr
         if (objPtr->parent == nullptr) {
-            TraverseObject(objPtr, identity, RenderObjects);
+            TraverseObject(objPtr, identity, 0, RenderObjects);
         }
     }
 }

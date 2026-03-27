@@ -7,6 +7,8 @@
 #include "PPRP.cuh"
 #include "FrameProcessing.cuh"
 #include "SharedTypes.h"
+#include "_EventBus.h"
+#include <cmath>
 
 class RenderingSystem {
 
