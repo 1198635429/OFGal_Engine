@@ -133,6 +133,8 @@
     <ClCompile Include="cmdDrawer.cpp" />
     <ClCompile Include="FileSystem.cpp" />
     <ClCompile Include="GameVM.cpp" />
+    <ClCompile Include="InputCollector.cpp" />
+    <ClCompile Include="InputSystem.cpp" />
     <ClCompile Include="Json_BPData_ReadWrite.cpp" />
     <ClCompile Include="Json_LevelData_ReadWrite.cpp" />
     <ClCompile Include="main.cpp" />
