@@ -99,3 +99,12 @@ void _EventBus::subscribe_ReadBPData(ReadBPData_Handler handler)
 {
     handlers_ReadBPData.push_back(handler);
 }
+}
+void _EventBus::publish_InputEvent(const InputEvent& event) {
+    for (auto& handler : handlers_InputEvent) {
+        handler(event);
+    }
+}
+void _EventBus::subscribe_InputEvent(InputEvent_Handler handler) {
+    handlers_InputEvent.push_back(handler);
+}

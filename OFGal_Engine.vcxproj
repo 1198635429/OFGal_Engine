@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -135,6 +135,8 @@
     <ClCompile Include="GameVM.cpp" />
     <ClCompile Include="Json_BPData_ReadWrite.cpp" />
     <ClCompile Include="Json_LevelData_ReadWrite.cpp" />
+    <ClCompile Include="InputCollector.cpp" />
+    <ClCompile Include="InputSystem.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ProjectStructureGetter.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />
@@ -164,6 +166,10 @@
     <ClInclude Include="RenderingSystem.h" />
     <ClInclude Include="SharedTypes.h" />
     <ClInclude Include="SRP.cuh" />
+    <ClInclude Include="InputCollector.h" />
+    <ClInclude Include="InputEvent.h" />
+    <ClInclude Include="InputSystem.h" />
+    <ClInclude Include="KeyCode.h" />
     <ClInclude Include="_EventBus.h" />
   </ItemGroup>
   <ItemGroup>
