@@ -19,20 +19,20 @@ static Matrix3D ComputeLocalMatrix(const TransformComponent& transform) {
 static void TraverseObject(
     ObjectData* obj,
     const Matrix3D& parentWorld,
-    int parentDepth,
+    std::vector<int> parentDepth,
     std::vector<RenderData>& outRenderObjects)
 {
     if (!obj) return;
 
     // 计算当前对象的世界矩阵和累积深度
     Matrix3D world = parentWorld;
-    int depth = parentDepth;
+    std::vector<int> depth = parentDepth;
 
     if (obj->Transform.has_value()) {
         const auto& trans = obj->Transform.value();
         Matrix3D local = ComputeLocalMatrix(trans);
         world = parentWorld * local;
-        depth = parentDepth + trans.Location.z;   // 累积深度
+        depth.push_back(trans.Location.z);   // 累积深度
 
         // 如果对象含有 Picture 组件，生成渲染数据
         if (obj->Picture.has_value() && std::filesystem::exists(obj->Picture->Path)) {
@@ -94,7 +94,40 @@ void RenderingSystem::RefreshRenderObjects(const LevelData & currentLevel) {
     Matrix3D identity;
     for (const auto& [objName, objPtr] : currentLevel.objects) {
         if (objPtr->parent == nullptr) {
-            TraverseObject(objPtr, identity, 0, RenderObjects);
+            std::vector<int> defaultDepth;
+            TraverseObject(objPtr, identity, defaultDepth, RenderObjects);
         }
     }
+}
+
+void RenderingSystem::AABB_Remove(std::vector<RenderData>& renderObjects) {
+    for (auto it = renderObjects.begin(); it != renderObjects.end(); ) {
+        const auto& points = it->points;
+        int x_min = std::min({ points[0].x, points[1].x, points[2].x, points[3].x });
+        int x_max = std::max({ points[0].x, points[1].x, points[2].x, points[3].x });
+        int y_min = std::min({ points[0].y, points[1].y, points[2].y, points[3].y });
+        int y_max = std::max({ points[0].y, points[1].y, points[2].y, points[3].y });
+
+        // 若完全在视口外
+        if (x_max < 0 || x_min >= CanvasSize.x || y_max < 0 || y_min >= CanvasSize.y)
+            it = renderObjects.erase(it); // erase 返回下一个元素的迭代器
+        else
+            ++it;
+    }
+}
+
+void RenderingSystem::SortByDepth(std::vector<RenderData>& renderObjects) {
+    std::sort(renderObjects.begin(), renderObjects.end(),
+        [](const RenderData& a, const RenderData& b) -> bool {
+            const auto& da = a.depth;
+            const auto& db = b.depth;
+            size_t minSize = std::min(da.size(), db.size());
+            for (size_t i = 0; i < minSize; ++i) {
+                if (da[i] != db[i]) {
+                    return da[i] > db[i];   // 降序：更深的在前
+                }
+            }
+            // 所有公共前缀相等，则较长的数组更深，应排在前面
+            return da.size() > db.size();
+        });
 }

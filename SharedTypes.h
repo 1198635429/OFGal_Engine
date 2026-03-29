@@ -251,7 +251,7 @@ struct Matrix3D {
 		// 计算行列式
 		float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
 
-		// 阈值，根据实际需求可调整
+		// 阈值，根据实际需求调整
 		const float epsilon = 1e-6f;
 		if (std::fabs(det) < epsilon) {
 			// 矩阵不可逆，返回单位矩阵（或根据需求抛出异常）
@@ -277,7 +277,7 @@ struct Matrix3D {
 };
 struct RenderData {
 	Matrix3D trans, inverse_trans;
-	Vector3D points[4];		// 存储累积变换后的顶点坐标
+	Vector3D points[4];		// 存储累积变换后的顶点坐标，左乘逆矩阵获取原坐标
 	BMP_Data texture;
-	int depth = 0;
+	std::vector<int> depth;		// 分级深度，顺序：父 -> 子
 };

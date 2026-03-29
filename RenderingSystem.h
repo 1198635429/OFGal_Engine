@@ -1,6 +1,7 @@
 ﻿// Copyright 2026 MrSeagull. All Rights Reserved.
 
 #pragma once
+#define NOMINMAX
 #include "BMP_Reader.h"
 #include "cmdDrawer.h"
 #include "SRP.cuh"
@@ -29,4 +30,6 @@ private:
     ~RenderingSystem() = default;
 
     void RefreshRenderObjects(const LevelData& currentLevel);
+    void AABB_Remove(std::vector<RenderData>& renderObjects);
+    void SortByDepth(std::vector<RenderData>& renderObjects);
 };
