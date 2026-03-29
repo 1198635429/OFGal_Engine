@@ -157,8 +157,12 @@
     <ClInclude Include="FileSystem.h" />
     <ClInclude Include="FrameProcessing.cuh" />
     <ClInclude Include="GameVM.h" />
+    <ClInclude Include="InputCollector.h" />
+    <ClInclude Include="InputEvent.h" />
+    <ClInclude Include="InputSystem.h" />
     <ClInclude Include="Json_BPData_ReadWrite.h" />
     <ClInclude Include="Json_LevelData_ReadWrite.h" />
+    <ClInclude Include="KeyCode.h" />
     <ClInclude Include="PPRP.cuh" />
     <ClInclude Include="ProjectStructureGetter.h" />
     <ClInclude Include="RenderingSystem.h" />
