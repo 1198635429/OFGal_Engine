@@ -23,9 +23,10 @@ int main() {
 	GameVM::getInstance();
 	RenderingSystem::getInstance();
 
-	InputSystem inputSystem;   //创建输入系统实例
+	InputSystem inputSystem;
 	InputCollector collector(&inputSystem);
 	std::thread inputThread(InputThread, &collector);
+	/*
 	while (running)
 	{
 		// ===== 检测 ESC 退出 =====
@@ -38,7 +39,9 @@ int main() {
 		Sleep(10);
 	}
 	running = false;
+	*/
 	inputThread.join();  //用于等待输入线程的结束
+	
 	system("pause");
 	return 0;
 }
