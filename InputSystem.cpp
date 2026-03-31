@@ -1,5 +1,5 @@
 #include <iostream>
-#include "InputSystem.h"
+#include "SharedTypes.h"
 InputSystem g_inputSystem;  //全局输入系统实例
 void InputSystem::clearEvent() {   //用于检测每一帧的键盘状态
 	std::lock_guard<std::mutex> lock(mtx);

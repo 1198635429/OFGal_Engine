@@ -2,14 +2,13 @@
 #include "_EventBus.h"
 #include "BMP_Reader.h"
 #include "cmdDrawer.h"
-#include "InputSystem.h"
 #include<windows.h>
 #include <atomic>
 #include <thread>
-#include"InputCollector.h"
 #include "FileSystem.h"
 #include "GameVM.h"
 #include "RenderingSystem.h"
+#include "SharedTypes.h"
 std::atomic<bool> running(true);    //创建原子变量，表示程序是否在运行
 void InputThread(InputCollector* collector) {
 	while (running) {

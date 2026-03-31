@@ -1,8 +1,4 @@
-#include "InputCollector.h"
-#include "InputSystem.h"
-#include "InputEvent.h"
-#include "KeyCode.h"
-
+#include "SharedTypes.h"
 InputCollector::InputCollector(InputSystem* system) :inputsystem(system) {}    //构造函数，接受一个输入系统的指针，并将其保存在成员变量中，以便在update函数中使用
 void InputCollector::update() {
 	bool ctrlDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) || (GetAsyncKeyState(VK_LCONTROL) & 0x8000);

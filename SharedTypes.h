@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <unordered_map>
 #include <optional>
+#include <mutex>
+#include <windows.h>
 
 /*
 =================================================
@@ -202,4 +204,48 @@ struct Frame {
 	int width;
 	int height;
 	std::vector<StdPixel> pixels;
+};
+class InputCollector {
+public:
+	InputCollector(InputSystem* system);
+	void update();   //核心轮询函数，能够查询当前的输入状态，并将输入事件添加到输入系统中
+private:
+	InputSystem* inputsystem;
+	bool prevSSatate = false;   //四个变量记录按键前一刻的状态
+	bool prevMouseLeft = false;
+	bool prevMouseRight = false;
+	bool prevMouseMiddle = false;
+	bool prevWState = false;
+
+};
+class InputSystem {
+public:
+	void clearEvent();  //每一帧更新，用于管理生命周期
+	void pushEvent(const InputEvent& event);   //添加输入事件,
+	const std::vector<InputEvent>& getEvents();  //获取输入事件
+private:
+	std::vector<InputEvent>events;  //输入事件队列
+	std::mutex mtx;   //创建一个互斥锁；
+};
+enum class InputType {
+	KeyDown,
+	KeyUp,
+	MouseMove,
+	MouseUp,
+	MouseDown
+};
+struct InputEvent {
+	InputType type;
+	KeyCode key;  //键盘
+	int mouseX = 0;     //鼠标位置
+	int mouseY = 0;
+};
+enum class KeyCode {
+
+	Unknown,
+	CtrlS,      // Ctrl + S
+	MouseLeft,
+	MouseRight,
+	MouseMiddle,
+	W
 };
