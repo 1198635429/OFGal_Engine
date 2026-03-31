@@ -12,8 +12,7 @@ __device__ Vector3D mulMatrixVector(const Matrix3D& mat, const Vector3D& vec) {
     result.z = mat.m[2][0] * vec.x + mat.m[2][1] * vec.y + mat.m[2][2] * vec.z;
     return result;
 }
-
-// 三次卷积核权重计算 (a = -0.5)
+// 三次卷积核权重计算 (a = -0.5)，可能会产生过冲和振铃伪影
 __device__ float cubicWeight(float x) {
     float ax = fabsf(x);
     if (ax <= 1.0f) {
@@ -21,6 +20,19 @@ __device__ float cubicWeight(float x) {
     }
     else if (ax < 2.0f) {
         return ((-0.5f * ax + 2.5f) * ax - 4.0f) * ax + 2.0f;
+    }
+    else {
+        return 0.0f;
+    }
+}
+// B-spline 三次卷积核 (a=1, 无负瓣)，完全无伪影，但边缘相对更模糊
+__device__ float bsplineWeight(float x) {
+    x = fabsf(x);
+    if (x < 1.0f) {
+        return 0.5f * x * x * x - x * x + 2.0f / 3.0f;
+    }
+    else if (x < 2.0f) {
+        return -x * x * x / 6.0f + x * x - 2.0f * x + 4.0f / 3.0f;
     }
     else {
         return 0.0f;
@@ -159,10 +171,11 @@ __device__ bool isPointInTriangle(float px, float py,
 }
 
 // 内核函数：并行处理四边形覆盖的像素
-__global__ void RasterizeQuadKernel(
+// 1.最近邻采样
+__global__ void Nearest_RasterizeQuadKernel(
     unsigned char* framePixels,
     int width, int height,
-    int offsetX, int offsetY,          // 新增偏移量
+    int offsetX, int offsetY,
     Matrix3D inverse_trans,
     Vector3D points[4],
     const unsigned char* texPixels,
@@ -206,11 +219,339 @@ __global__ void RasterizeQuadKernel(
 
         // 正确写入帧缓冲
         int idx = (y * width + x) * 3;
-        float alpha_multiple = texPixels[(j * texWidth + i) * 4 + 3] / 255.0f;
+        float alpha_multiple = float(texPixels[(j * texWidth + i) * 4 + 3]) / 255.0f;
         framePixels[idx + 0] = r * alpha_multiple + framePixels[idx + 0] * (1.0f - alpha_multiple);
         framePixels[idx + 1] = g * alpha_multiple + framePixels[idx + 1] * (1.0f - alpha_multiple);
         framePixels[idx + 2] = b * alpha_multiple + framePixels[idx + 2] * (1.0f - alpha_multiple);
     }
+}
+// 2.双线性插值
+__global__ void Bilinear_RasterizeQuadKernel(
+    unsigned char* framePixels,
+    int width, int height,
+    int offsetX, int offsetY,
+    Matrix3D inverse_trans,
+    Vector3D points[4],
+    const unsigned char* texPixels,
+    int texWidth, int texHeight,
+    int msaaMultiple)
+{
+    int x = offsetX + blockIdx.x * blockDim.x + threadIdx.x;
+    int y = offsetY + blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    float px = x + 0.5f;
+    float py = y + 0.5f;
+
+    // 将四边形拆成两个三角形
+    Vector3D tri1[3] = { points[0], points[1], points[2] };
+    Vector3D tri2[3] = { points[0], points[2], points[3] };
+
+    bool inside = isPointInTriangle(px, py,
+        tri1[0].x, tri1[0].y,
+        tri1[1].x, tri1[1].y,
+        tri1[2].x, tri1[2].y) ||
+        isPointInTriangle(px, py,
+            tri2[0].x, tri2[0].y,
+            tri2[1].x, tri2[1].y,
+            tri2[2].x, tri2[2].y);
+
+    if (inside) {
+        Vector3D P = { px, py, 1 };
+        Vector3D TargetPixel = mulMatrixVector(inverse_trans, P);
+
+        float i = TargetPixel.x;
+        float j = TargetPixel.y;
+
+        int left = int(i);
+        int right = int(i + 1);
+        int top = int(j);
+        int bottom = int(j + 1);
+
+        left = max(0, min(left, texWidth - 1));
+        right = max(0, min(right, texWidth - 1));
+        top = max(0, min(top, texHeight - 1));
+        bottom = max(0, min(bottom, texHeight - 1));
+
+        float u = i - left;          // 水平方向小数部分
+        float v = j - top;           // 垂直方向小数部分
+        float one_minus_u = 1.0f - u;
+        float one_minus_v = 1.0f - v;
+
+        // 获取四个纹素的指针（简化索引计算）
+        int idxTL = (top * texWidth + left) * 4;
+        int idxTR = (top * texWidth + right) * 4;
+        int idxBL = (bottom * texWidth + left) * 4;
+        int idxBR = (bottom * texWidth + right) * 4;
+
+        // 双线性插值：R,G,B
+        unsigned char r = (unsigned char)(
+            (texPixels[idxTL + 0] * one_minus_u + texPixels[idxTR + 0] * u) * one_minus_v +
+            (texPixels[idxBL + 0] * one_minus_u + texPixels[idxBR + 0] * u) * v
+            );
+        unsigned char g = (unsigned char)(
+            (texPixels[idxTL + 1] * one_minus_u + texPixels[idxTR + 1] * u) * one_minus_v +
+            (texPixels[idxBL + 1] * one_minus_u + texPixels[idxBR + 1] * u) * v
+            );
+        unsigned char b = (unsigned char)(
+            (texPixels[idxTL + 2] * one_minus_u + texPixels[idxTR + 2] * u) * one_minus_v +
+            (texPixels[idxBL + 2] * one_minus_u + texPixels[idxBR + 2] * u) * v
+            );
+
+        // Alpha 插值并归一化
+        float alpha = (
+            (texPixels[idxTL + 3] * one_minus_u + texPixels[idxTR + 3] * u) * one_minus_v +
+            (texPixels[idxBL + 3] * one_minus_u + texPixels[idxBR + 3] * u) * v
+            ) / 255.0f;
+
+        // Alpha 混合写入帧缓冲
+        int idx = (y * width + x) * 3;
+        framePixels[idx + 0] = r * alpha + framePixels[idx + 0] * (1.0f - alpha);
+        framePixels[idx + 1] = g * alpha + framePixels[idx + 1] * (1.0f - alpha);
+        framePixels[idx + 2] = b * alpha + framePixels[idx + 2] * (1.0f - alpha);
+    }
+}
+// 3.双三性插值采样
+__global__ void Bicubic_RasterizeQuadKernel(
+    unsigned char* framePixels,
+    int width, int height,
+    int offsetX, int offsetY,
+    Matrix3D inverse_trans,
+    Vector3D points[4],
+    const unsigned char* texPixels,
+    int texWidth, int texHeight,
+    int msaaMultiple)
+{
+    int x = offsetX + blockIdx.x * blockDim.x + threadIdx.x;
+    int y = offsetY + blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    float px = x + 0.5f;
+    float py = y + 0.5f;
+
+    // 将四边形拆成两个三角形
+    Vector3D tri1[3] = { points[0], points[1], points[2] };
+    Vector3D tri2[3] = { points[0], points[2], points[3] };
+
+    bool inside = isPointInTriangle(px, py,
+        tri1[0].x, tri1[0].y,
+        tri1[1].x, tri1[1].y,
+        tri1[2].x, tri1[2].y) ||
+        isPointInTriangle(px, py,
+            tri2[0].x, tri2[0].y,
+            tri2[1].x, tri2[1].y,
+            tri2[2].x, tri2[2].y);
+
+    if (inside) {
+        Vector3D P = { px, py, 1 };
+        Vector3D TargetPixel = mulMatrixVector(inverse_trans, P);
+
+        float i = TargetPixel.x;   // 纹理坐标 x
+        float j = TargetPixel.y;   // 纹理坐标 y
+
+        // 获取整数部分和小数部分
+        int i0 = (int)floorf(i);
+        int j0 = (int)floorf(j);
+        float u = i - i0;   // 水平方向小数部分
+        float v = j - j0;   // 垂直方向小数部分
+
+        // 累加器
+        float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumA = 0.0f;
+        float totalWeight = 0.0f;
+
+        // 遍历周围 4x4 邻域
+        for (int dy = -1; dy <= 2; ++dy) {
+            for (int dx = -1; dx <= 2; ++dx) {
+                // 纹理坐标整数索引
+                int ix = i0 + dx;
+                int iy = j0 + dy;
+
+                // 边界处理：clamp 到有效范围
+                ix = max(0, min(ix, texWidth - 1));
+                iy = max(0, min(iy, texHeight - 1));
+
+                // 计算权重：水平权重 * 垂直权重
+                float wx = bsplineWeight(dx - u);   // 注意：dx - u 范围 [-1-u, 2-u] 约 [-1.5,2.5]
+                float wy = bsplineWeight(dy - v);
+                float w = wx * wy;
+
+                // 获取纹素颜色
+                int idx = (iy * texWidth + ix) * 4;
+                unsigned char r = texPixels[idx + 0];
+                unsigned char g = texPixels[idx + 1];
+                unsigned char b = texPixels[idx + 2];
+                unsigned char a = texPixels[idx + 3];
+
+                sumR += r * w;
+                sumG += g * w;
+                sumB += b * w;
+                sumA += a * w;
+                totalWeight += w;
+            }
+        }
+
+        // 归一化（避免边界处权重和不为1）
+        if (totalWeight > 1e-6f) {
+            sumR /= totalWeight;
+            sumG /= totalWeight;
+            sumB /= totalWeight;
+            sumA /= totalWeight;
+        }
+
+        // 转换为 unsigned char
+        unsigned char r = (unsigned char)(sumR + 0.5f);
+        unsigned char g = (unsigned char)(sumG + 0.5f);
+        unsigned char b = (unsigned char)(sumB + 0.5f);
+        float alpha = sumA / 255.0f;   // 归一化
+
+        // Alpha 混合写入帧缓冲
+        int idx = (y * width + x) * 3;
+        framePixels[idx + 0] = r * alpha + framePixels[idx + 0] * (1.0f - alpha);
+        framePixels[idx + 1] = g * alpha + framePixels[idx + 1] * (1.0f - alpha);
+        framePixels[idx + 2] = b * alpha + framePixels[idx + 2] * (1.0f - alpha);
+    }
+}
+// 4.各向异性过滤
+// 辅助函数：双线性采样一个点（带边界clamp）
+__device__ void bilinearSample(
+    float i, float j,
+    const unsigned char* texPixels,
+    int texWidth, int texHeight,
+    float& outR, float& outG, float& outB, float& outA)
+{
+    // 边界clamp
+    i = fmaxf(0.0f, fminf(i, texWidth - 1.0f));
+    j = fmaxf(0.0f, fminf(j, texHeight - 1.0f));
+
+    int left = (int)i;
+    int top = (int)j;
+    int right = left + 1;
+    int bottom = top + 1;
+
+    left = max(0, min(left, texWidth - 1));
+    right = max(0, min(right, texWidth - 1));
+    top = max(0, min(top, texHeight - 1));
+    bottom = max(0, min(bottom, texHeight - 1));
+
+    float u = i - left;
+    float v = j - top;
+    float one_minus_u = 1.0f - u;
+    float one_minus_v = 1.0f - v;
+
+    int idxTL = (top * texWidth + left) * 4;
+    int idxTR = (top * texWidth + right) * 4;
+    int idxBL = (bottom * texWidth + left) * 4;
+    int idxBR = (bottom * texWidth + right) * 4;
+
+    outR = (texPixels[idxTL + 0] * one_minus_u + texPixels[idxTR + 0] * u) * one_minus_v
+        + (texPixels[idxBL + 0] * one_minus_u + texPixels[idxBR + 0] * u) * v;
+    outG = (texPixels[idxTL + 1] * one_minus_u + texPixels[idxTR + 1] * u) * one_minus_v
+        + (texPixels[idxBL + 1] * one_minus_u + texPixels[idxBR + 1] * u) * v;
+    outB = (texPixels[idxTL + 2] * one_minus_u + texPixels[idxTR + 2] * u) * one_minus_v
+        + (texPixels[idxBL + 2] * one_minus_u + texPixels[idxBR + 2] * u) * v;
+    outA = (texPixels[idxTL + 3] * one_minus_u + texPixels[idxTR + 3] * u) * one_minus_v
+        + (texPixels[idxBL + 3] * one_minus_u + texPixels[idxBR + 3] * u) * v;
+}
+
+// 各向异性过滤的主kernel
+__global__ void Anisotropic_RasterizeQuadKernel(
+    unsigned char* framePixels,
+    int width, int height,
+    int offsetX, int offsetY,
+    Matrix3D inverse_trans,
+    Vector3D points[4],
+    const unsigned char* texPixels,
+    int texWidth, int texHeight,
+    int msaaMultiple,
+    int anisoLevel)          // 各向异性倍数（例如 2, 4, 8, 16）
+{
+    int x = offsetX + blockIdx.x * blockDim.x + threadIdx.x;
+    int y = offsetY + blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    float px = x + 0.5f;
+    float py = y + 0.5f;
+
+    // 三角形包含测试（同双线性）
+    Vector3D tri1[3] = { points[0], points[1], points[2] };
+    Vector3D tri2[3] = { points[0], points[2], points[3] };
+    bool inside = isPointInTriangle(px, py,
+        tri1[0].x, tri1[0].y,
+        tri1[1].x, tri1[1].y,
+        tri1[2].x, tri1[2].y) ||
+        isPointInTriangle(px, py,
+            tri2[0].x, tri2[0].y,
+            tri2[1].x, tri2[1].y,
+            tri2[2].x, tri2[2].y);
+    if (!inside) return;
+
+    // 计算纹理坐标
+    Vector3D P = { px, py, 1 };
+    Vector3D TargetPixel = mulMatrixVector(inverse_trans, P);
+    float i = TargetPixel.x;
+    float j = TargetPixel.y;
+
+    // 从逆变换矩阵中提取纹理坐标对屏幕坐标的偏导数
+    float dudx = inverse_trans.m[0][0];
+    float dudy = inverse_trans.m[0][1];
+    float dvdx = inverse_trans.m[1][0];
+    float dvdy = inverse_trans.m[1][1];
+
+    // 计算两个梯度向量的长度平方
+    float lenX2 = dudx * dudx + dvdx * dvdx;
+    float lenY2 = dudy * dudy + dvdy * dvdy;
+
+    // 选择主方向（梯度较大的方向）
+    float dir_u, dir_v;
+    if (lenX2 >= lenY2) {
+        dir_u = dudx;
+        dir_v = dvdx;
+    }
+    else {
+        dir_u = dudy;
+        dir_v = dvdy;
+    }
+
+    // 采样数至少为1，不超过最大倍数（避免过多循环）
+    int samples = max(1, min(anisoLevel, 16));
+    float step_u, step_v;
+    if (samples > 1) {
+        step_u = dir_u / (samples - 1);
+        step_v = dir_v / (samples - 1);
+    }
+    else {
+        step_u = 0.0f;
+        step_v = 0.0f;
+    }
+
+    // 起始偏移量：使采样范围以原始点为中心
+    float start_u = -(samples - 1) * 0.5f * step_u;
+    float start_v = -(samples - 1) * 0.5f * step_v;
+
+    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumA = 0.0f;
+    for (int s = 0; s < samples; ++s) {
+        float sample_i = i + start_u + s * step_u;
+        float sample_j = j + start_v + s * step_v;
+        float r, g, b, a;
+        bilinearSample(sample_i, sample_j, texPixels, texWidth, texHeight, r, g, b, a);
+        sumR += r;
+        sumG += g;
+        sumB += b;
+        sumA += a;
+    }
+
+    // 取平均
+    float invSamples = 1.0f / samples;
+    unsigned char r = (unsigned char)(sumR * invSamples + 0.5f);
+    unsigned char g = (unsigned char)(sumG * invSamples + 0.5f);
+    unsigned char b = (unsigned char)(sumB * invSamples + 0.5f);
+    float alpha = (sumA * invSamples) / 255.0f;
+
+    // Alpha混合写入帧缓冲
+    int idx = (y * width + x) * 3;
+    framePixels[idx + 0] = r * alpha + framePixels[idx + 0] * (1.0f - alpha);
+    framePixels[idx + 1] = g * alpha + framePixels[idx + 1] * (1.0f - alpha);
+    framePixels[idx + 2] = b * alpha + framePixels[idx + 2] * (1.0f - alpha);
 }
 
 extern "C" void Rasterize_An_Object(Frame& frame, const RenderData& obj, const int& MSAA_Multiple) {
@@ -258,7 +599,7 @@ extern "C" void Rasterize_An_Object(Frame& frame, const RenderData& obj, const i
     cudaMemcpy(d_points, obj.points, pointsBytes, cudaMemcpyHostToDevice);
 
     // ----- 启动内核 -----
-    RasterizeQuadKernel <<< gridSize, blockSize >>> (
+    Bicubic_RasterizeQuadKernel <<< gridSize, blockSize >>> (
         d_frame, width, height,
         xStart, yStart,
         obj.inverse_trans,
