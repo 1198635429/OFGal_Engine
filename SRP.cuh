@@ -3,15 +3,23 @@
 #pragma once
 #define NOMINMAX
 #include "SharedTypes.h"
-// #include "RenderingSystem.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    BMP_Data ForceResizeImage_Bicubic(const BMP_Data& src, const Size2DInt& dstSize);
+    // 纹理采样方法枚举
+    enum TextureSamplingMethod {
+        SAMPLING_NEAREST = 0,
+        SAMPLING_BILINEAR = 1,
+        SAMPLING_BICUBIC = 2,
+        SAMPLING_ANISOTROPIC = 3
+    };
 
-    void Rasterize_An_Object(Frame& frame, const RenderData& obj, const int& MSAA_Multiple);
+    // 渲染一个四边形对象，支持多种纹理采样方法
+    // anisoLevel: 各向异性采样倍数（仅在方法为 ANISOTROPIC 时有效，范围 1~16）
+    void Rasterize_An_Object(Frame& frame, const RenderData& obj,
+        TextureSamplingMethod method, int anisoLevel = 1, int MSAA = 1);
 
 #ifdef __cplusplus
 }

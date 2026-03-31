@@ -34,7 +34,7 @@ private:
         SortByDepth(RenderObjects);
         RefreshDepth(RenderObjects);
 
-        Frame frame = Rasterize(RenderObjects);
+        Frame frame = Rasterize_ANISOTROPIC(RenderObjects,16);
         drawFrame(frame);
         
     }
@@ -45,4 +45,5 @@ private:
     void SortByDepth(std::vector<RenderData>& renderObjects);
     void RefreshDepth(std::vector<RenderData>& renderObjects);
     Frame Rasterize(std::vector<RenderData>& renderObjects, int MSAA_Multiple = 1);
+    Frame Rasterize_ANISOTROPIC(std::vector<RenderData>& renderObjects, int anisoLevel = 1, int MSAA_Multiple = 1);
 };

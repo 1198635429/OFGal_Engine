@@ -145,12 +145,30 @@ Frame RenderingSystem::Rasterize(std::vector<RenderData>& renderObjects, int MSA
     result.height = CanvasSize.y;
     result.pixels.resize(CanvasSize.x * CanvasSize.y, { 0,0,0 });
 
-    // 验证MSAA有效性
+    // 验证有效性
     if(MSAA_Multiple < 1 || MSAA_Multiple > 4)
         MSAA_Multiple = 1;
 
     for (RenderData& renderData : renderObjects) {
-        Rasterize_An_Object(result, renderData, MSAA_Multiple);
+        Rasterize_An_Object(result, renderData, SAMPLING_BICUBIC, 1, MSAA_Multiple);
+    }
+
+    return result;
+}
+Frame RenderingSystem::Rasterize_ANISOTROPIC(std::vector<RenderData>& renderObjects, int anisoLevel, int MSAA_Multiple) {
+    Frame result;
+    result.width = CanvasSize.x;
+    result.height = CanvasSize.y;
+    result.pixels.resize(CanvasSize.x * CanvasSize.y, { 0,0,0 });
+
+    // 验证有效性
+    if (anisoLevel < 1 || anisoLevel > 16)
+        anisoLevel = 1;
+    if (MSAA_Multiple < 1 || MSAA_Multiple > 4)
+        MSAA_Multiple = 1;
+
+    for (RenderData& renderData : renderObjects) {
+        Rasterize_An_Object(result, renderData, SAMPLING_ANISOTROPIC, anisoLevel, MSAA_Multiple);
     }
 
     return result;
