@@ -14,7 +14,7 @@ struct AudioClip {
         : path(""), loop(false), volume(1.0f), isPaused(false) {
     }
 
-    // 构造函数，初始化音频路径和循环标志
+    // 构造函数，初始化音频路径和循环标志,
     AudioClip(const std::string& path, bool loop)
         : path(path), loop(loop), volume(1.0f), isPaused(false) {
     }
