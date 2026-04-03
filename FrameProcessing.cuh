@@ -2,6 +2,9 @@
 // 含有基础的后处理函数
 #pragma once
 #include "SharedTypes.h"
+#include <cuda_runtime.h>
+#include <math.h>
+#include <algorithm>
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +60,59 @@ extern "C" {
 // centerX  : 径向模式下的中心 X 坐标（归一化 0~1）
 // centerY  : 径向模式下的中心 Y 坐标（归一化 0~1）
     void applyChromaticAberration(Frame& frame, float strength = 2.0f, int mode = 0, float centerX = 0.5f, float centerY = 0.5f);
+
+// 模糊（高斯模糊）函数
+// frame      : 输入输出帧（LDR RGB888）
+// radius     : 模糊半径（像素），建议 1～15
+// sigma      : 高斯标准差，若 <=0 则自动取 radius/3
+// direction  : 模糊方向，0 = 无方向（二维高斯），1 = 水平方向，2 = 垂直方向
+    void applyBlur(Frame& frame, int radius = 3, float sigma = -1.0f, int direction = 0);
+
+// 锐化（Unsharp Mask）函数
+// frame      : 输入输出帧（LDR RGB888）
+// strength   : 锐化强度（0.0～2.0），值越大锐化效果越强，建议 0.3～1.0
+// radius     : 高斯模糊半径（像素），建议 1～5
+// sigma      : 高斯标准差，若 <=0 则自动取 radius/3
+    void applySharpen(Frame& frame, float strength = 0.5f, int radius = 2, float sigma = -1.0f);
+
+// 胶片颗粒（Film Grain）
+// frame    : 输入输出帧（LDR RGB888）
+// intensity: 颗粒强度（0.0～0.2 较自然，更大则明显），建议 0.05
+// grainSize: 颗粒大小（像素块大小），1 表示每像素独立，2 表示 2x2 块等，建议 1
+// dynamic  : 是否动态（每帧变化），true 时需传入 frameId，false 时基于固定坐标噪声
+// frameId  : 当前帧序号（用于动态噪声种子，仅当 dynamic=true 时有效）
+    void applyFilmGrain(Frame& frame, float intensity = 0.05f, int grainSize = 1, bool dynamic = true, int frameId = 0);
+
+// 晕影（Vignette）
+// frame     : 输入输出帧（LDR RGB888）
+// intensity : 暗角强度（0.0～1.0），值越大边缘越暗
+// innerRadius: 内半径（归一化距离），0~1，小于此值无暗角，默认 0.6
+// outerRadius: 外半径（归一化距离），大于此值达到最大暗角，默认 1.0
+// centerX, centerY: 晕影中心（归一化坐标 0~1），默认 (0.5, 0.5)
+// exponent  : 衰减曲线指数，1.0 线性，>1 边缘衰减更快，默认 1.0
+    void applyVignette(Frame& frame, float intensity = 0.3f, float innerRadius = 0.6f, float outerRadius = 1.0f,
+        float centerX = 0.5f, float centerY = 0.5f, float exponent = 1.0f);
+
+// 基础调色函数（逐像素调整）
+// frame       : 输入输出帧
+// brightness  : 亮度偏移（-1.0 ~ 1.0），0 不变
+// contrast    : 对比度（0.0 ~ 2.0），1.0 不变
+// saturation  : 饱和度（0.0 ~ 2.0），1.0 不变
+// whiteBalance: 白平衡系数（RGB 分别乘），默认 (1,1,1)
+// hueShift    : 色相偏移（-180° ~ 180°），单位度
+    void applyColorCorrection(Frame& frame,
+        float brightness = 0.0f,
+        float contrast = 1.0f,
+        float saturation = 1.0f,
+        float3 whiteBalance = make_float3(1.0f, 1.0f, 1.0f),
+        float hueShift = 0.0f);
+
+// 风格化颜色分级（预设风格 + 自定义混合）
+// frame       : 输入输出帧
+// style       : 风格类型 0=冷色调, 1=暖色调, 2=黑白, 3=复古, 4=赛博朋克, 5=自定义
+// intensity   : 风格强度（0.0 ~ 1.0），控制风格与原图的混合比例
+// customColor : 自定义色调（仅当 style=5 时有效），作为叠加颜色
+    void applyColorGrading(Frame& frame, int style = 0, float intensity = 0.8f, float3 customColor = make_float3(1.0f, 1.0f, 1.0f));
 
 #ifdef __cplusplus
 }

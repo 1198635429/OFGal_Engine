@@ -1,8 +1,5 @@
 ﻿// Copyright 2026 MrSeagull. All Rights Reserved.
 #include "FrameProcessing.cuh"
-#include <cuda_runtime.h>
-#include <math.h>
-#include <algorithm>
 
 // ----------------------------- 辅助函数 -----------------------------
 
@@ -784,6 +781,588 @@ void applyChromaticAberration(Frame& frame, float strength, int mode, float cent
     for (int i = 0; i < totalPixels; ++i) {
         frame.pixels[i] = float3ToPixel(h_output[i]);
     }
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaDeviceSynchronize();
+}
+
+// ----------------------------- 模糊（高斯模糊）函数 -----------------------------
+void applyBlur(Frame& frame, int radius, float sigma, int direction) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    // 参数钳制
+    radius = min(max(radius, 1), 15);
+    if (sigma <= 0.0f) sigma = radius / 3.0f;
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    // 分配设备内存
+    float3* d_image = nullptr;
+    float3* d_temp = nullptr;
+    float3* d_output = nullptr;
+    cudaMalloc(&d_image, imgSize);
+    cudaMalloc(&d_temp, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    if (!d_image || !d_temp || !d_output) {
+        cudaFree(d_image); cudaFree(d_temp); cudaFree(d_output);
+        return;
+    }
+
+    // 主机端转换为 float3
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i) {
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    }
+    cudaMemcpy(d_image, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    // 生成一维高斯核
+    std::vector<float> kernel = makeGaussianKernel(radius, sigma);
+    float* d_kernel = nullptr;
+    cudaMalloc(&d_kernel, kernel.size() * sizeof(float));
+    cudaMemcpy(d_kernel, kernel.data(), kernel.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+
+    if (direction == 0) {
+        // 无方向：水平 + 垂直
+        gaussianBlurHorizontal <<< grid, block >>> (d_image, d_temp, frame.width, frame.height, d_kernel, radius);
+        gaussianBlurVertical <<< grid, block >>> (d_temp, d_output, frame.width, frame.height, d_kernel, radius);
+    }
+    else if (direction == 1) {
+        // 水平定向模糊
+        gaussianBlurHorizontal <<< grid, block >>> (d_image, d_output, frame.width, frame.height, d_kernel, radius);
+    }
+    else if (direction == 2) {
+        // 垂直定向模糊
+        gaussianBlurVertical <<< grid, block >>> (d_image, d_output, frame.width, frame.height, d_kernel, radius);
+    }
+    else {
+        // 无效方向，原样输出
+        cudaMemcpy(d_output, d_image, imgSize, cudaMemcpyDeviceToDevice);
+    }
+
+    // 拷贝回主机并转换回 StdPixel
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i) {
+        frame.pixels[i] = float3ToPixel(h_output[i]);
+    }
+
+    // 释放设备内存
+    cudaFree(d_image);
+    cudaFree(d_temp);
+    cudaFree(d_output);
+    cudaFree(d_kernel);
+    cudaDeviceSynchronize();
+}
+
+// ----------------------------- 锐化内核（完全 GPU 加速）-----------------------------
+__global__ void sharpenKernel(const float3* original, const float3* blurred, float3* output,
+    int width, int height, float strength) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    int idx = y * width + x;
+    float3 orig = original[idx];
+    float3 blur = blurred[idx];
+
+    float3 sharp;
+    sharp.x = orig.x + strength * (orig.x - blur.x);
+    sharp.y = orig.y + strength * (orig.y - blur.y);
+    sharp.z = orig.z + strength * (orig.z - blur.z);
+
+    // Clamp to [0,1]
+    sharp.x = fminf(fmaxf(sharp.x, 0.0f), 1.0f);
+    sharp.y = fminf(fmaxf(sharp.y, 0.0f), 1.0f);
+    sharp.z = fminf(fmaxf(sharp.z, 0.0f), 1.0f);
+
+    output[idx] = sharp;
+}
+
+// 主机端锐化函数（完全 GPU 加速）
+void applySharpen(Frame& frame, float strength, int radius, float sigma) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    // 参数钳制
+    strength = fminf(fmaxf(strength, 0.0f), 2.0f);
+    radius = min(max(radius, 1), 15);
+    if (sigma <= 0.0f) sigma = radius / 3.0f;
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    // 分配设备内存
+    float3* d_original = nullptr, * d_blurred = nullptr, * d_output = nullptr, * d_temp = nullptr;
+    cudaMalloc(&d_original, imgSize);
+    cudaMalloc(&d_blurred, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    cudaMalloc(&d_temp, imgSize);
+    if (!d_original || !d_blurred || !d_output || !d_temp) {
+        cudaFree(d_original); cudaFree(d_blurred); cudaFree(d_output); cudaFree(d_temp);
+        return;
+    }
+
+    // 主机端转换为 float3 并拷贝到设备
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i) {
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    }
+    cudaMemcpy(d_original, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    // 生成高斯核
+    std::vector<float> kernel = makeGaussianKernel(radius, sigma);
+    float* d_kernel = nullptr;
+    cudaMalloc(&d_kernel, kernel.size() * sizeof(float));
+    cudaMemcpy(d_kernel, kernel.data(), kernel.size() * sizeof(float), cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+
+    // 高斯模糊：水平 + 垂直 -> d_blurred
+    gaussianBlurHorizontal <<< grid, block >>> (d_original, d_temp, frame.width, frame.height, d_kernel, radius);
+    gaussianBlurVertical <<< grid, block >>> (d_temp, d_blurred, frame.width, frame.height, d_kernel, radius);
+
+    // 锐化内核
+    sharpenKernel <<< grid, block >>> (d_original, d_blurred, d_output, frame.width, frame.height, strength);
+
+    // 拷贝回主机并转换回 StdPixel
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i) {
+        frame.pixels[i] = float3ToPixel(h_output[i]);
+    }
+
+    // 释放设备内存
+    cudaFree(d_original);
+    cudaFree(d_blurred);
+    cudaFree(d_output);
+    cudaFree(d_temp);
+    cudaFree(d_kernel);
+    cudaDeviceSynchronize();
+}
+
+// ----------------------------- 胶片颗粒内核 -----------------------------
+// 基于坐标和帧序号的随机数生成器（简单哈希）
+__device__ inline float randomNoise(int x, int y, int frameId, int grainSize) {
+    // 合并坐标和帧号，并考虑颗粒块大小
+    int sx = x / grainSize;
+    int sy = y / grainSize;
+    int seed = sx * 374761393 + sy * 668265263 + frameId * 1013904223;
+    seed = (seed ^ (seed >> 13)) * 1274126177;
+    seed = (seed ^ (seed >> 15)) * 0x9e3779b9;
+    seed = seed ^ (seed >> 16);
+    // 返回 [0,1] 范围
+    return (seed & 0x7fffffff) / 2147483648.0f;
+}
+
+__global__ void filmGrainKernel(const float3* input, float3* output,
+    int width, int height,
+    float intensity, int grainSize, bool dynamic, int frameId) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    int idx = y * width + x;
+
+    float3 color = input[idx];
+    float noise;
+
+    if (dynamic) {
+        noise = randomNoise(x, y, frameId, grainSize);
+    }
+    else {
+        // 静态噪声：基于坐标，帧号固定为 0
+        noise = randomNoise(x, y, 0, grainSize);
+    }
+
+    // 将噪声映射到 [-intensity, intensity]
+    float grain = (noise * 2.0f - 1.0f) * intensity;
+
+    // 简单亮度颗粒（RGB 增加相同值，保持色相）
+    // 更高级：可仅加在亮度通道，这里为简单高效直接加 RGB
+    float3 result;
+    result.x = fminf(fmaxf(color.x + grain, 0.0f), 1.0f);
+    result.y = fminf(fmaxf(color.y + grain, 0.0f), 1.0f);
+    result.z = fminf(fmaxf(color.z + grain, 0.0f), 1.0f);
+
+    output[idx] = result;
+}
+
+// 主机端胶片颗粒函数
+void applyFilmGrain(Frame& frame, float intensity, int grainSize, bool dynamic, int frameId) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    // 参数钳制
+    intensity = fminf(fmaxf(intensity, 0.0f), 0.5f);
+    grainSize = max(1, grainSize);
+    if (frameId < 0) frameId = 0;
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    // 分配设备内存
+    float3* d_input = nullptr;
+    float3* d_output = nullptr;
+    cudaMalloc(&d_input, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    if (!d_input || !d_output) {
+        cudaFree(d_input); cudaFree(d_output);
+        return;
+    }
+
+    // 主机端转换为 float3
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i) {
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    }
+    cudaMemcpy(d_input, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+    filmGrainKernel <<< grid, block >>> (d_input, d_output,
+        frame.width, frame.height,
+        intensity, grainSize, dynamic, frameId);
+
+    // 拷贝回主机并转换回 StdPixel
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i) {
+        frame.pixels[i] = float3ToPixel(h_output[i]);
+    }
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaDeviceSynchronize();
+}
+
+// ----------------------------- 晕影内核 -----------------------------
+__global__ void vignetteKernel(const float3* input, float3* output,
+    int width, int height,
+    float intensity, float innerRadius, float outerRadius,
+    float centerX, float centerY, float exponent) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    int idx = y * width + x;
+
+    // 归一化坐标 [0,1]
+    float u = (float)x / (width - 1);
+    float v = (float)y / (height - 1);
+
+    // 到中心的距离（归一化，最大距离为到角落的距离）
+    float du = u - centerX;
+    float dv = v - centerY;
+    float dist = sqrtf(du * du + dv * dv);
+    float maxDist = sqrtf(fmaxf(centerX, 1.0f - centerX) * fmaxf(centerX, 1.0f - centerX) +
+        fmaxf(centerY, 1.0f - centerY) * fmaxf(centerY, 1.0f - centerY));
+    float normDist = fminf(dist / maxDist, 1.0f);
+
+    // 计算衰减因子
+    float factor = 1.0f;
+    if (normDist > innerRadius) {
+        float t = (normDist - innerRadius) / (outerRadius - innerRadius);
+        t = fminf(fmaxf(t, 0.0f), 1.0f);
+        // 应用指数曲线
+        t = powf(t, exponent);
+        factor = 1.0f - intensity * t;
+    }
+
+    float3 color = input[idx];
+    output[idx] = make_float3(color.x * factor, color.y * factor, color.z * factor);
+}
+
+// 主机端晕影函数
+void applyVignette(Frame& frame, float intensity, float innerRadius, float outerRadius,
+    float centerX, float centerY, float exponent) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    // 参数钳制
+    intensity = fminf(fmaxf(intensity, 0.0f), 1.0f);
+    innerRadius = fminf(fmaxf(innerRadius, 0.0f), 1.0f);
+    outerRadius = fminf(fmaxf(outerRadius, innerRadius + 0.001f), 1.0f);
+    centerX = fminf(fmaxf(centerX, 0.0f), 1.0f);
+    centerY = fminf(fmaxf(centerY, 0.0f), 1.0f);
+    exponent = fmaxf(exponent, 0.1f);
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    // 分配设备内存
+    float3* d_input = nullptr;
+    float3* d_output = nullptr;
+    cudaMalloc(&d_input, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    if (!d_input || !d_output) {
+        cudaFree(d_input); cudaFree(d_output);
+        return;
+    }
+
+    // 主机端转换为 float3
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i) {
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    }
+    cudaMemcpy(d_input, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+    vignetteKernel <<< grid, block >>> (d_input, d_output,
+        frame.width, frame.height,
+        intensity, innerRadius, outerRadius,
+        centerX, centerY, exponent);
+
+    // 拷贝回主机并转换回 StdPixel
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i) {
+        frame.pixels[i] = float3ToPixel(h_output[i]);
+    }
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaDeviceSynchronize();
+}
+
+// 辅助函数：RGB 转 HSL（色相 0~360, 饱和度 0~1, 亮度 0~1）
+__device__ inline void rgb2hsl(float3 rgb, float& h, float& s, float& l) {
+    float r = rgb.x, g = rgb.y, b = rgb.z;
+    float maxC = fmaxf(r, fmaxf(g, b));
+    float minC = fminf(r, fminf(g, b));
+    l = (maxC + minC) * 0.5f;
+    if (maxC == minC) {
+        h = s = 0.0f;
+        return;
+    }
+    float d = maxC - minC;
+    s = (l > 0.5f) ? d / (2.0f - maxC - minC) : d / (maxC + minC);
+    if (maxC == r)
+        h = (g - b) / d + (g < b ? 6.0f : 0.0f);
+    else if (maxC == g)
+        h = (b - r) / d + 2.0f;
+    else
+        h = (r - g) / d + 4.0f;
+    h *= 60.0f;
+}
+
+// 辅助函数：HSL 转 RGB
+__device__ inline float3 hsl2rgb(float h, float s, float l) {
+    float c = (1.0f - fabsf(2.0f * l - 1.0f)) * s;
+    float hp = h / 60.0f;
+    float x = c * (1.0f - fabsf(fmodf(hp, 2.0f) - 1.0f));
+    float3 rgb;
+    if (hp < 1.0f)      rgb = make_float3(c, x, 0.0f);
+    else if (hp < 2.0f) rgb = make_float3(x, c, 0.0f);
+    else if (hp < 3.0f) rgb = make_float3(0.0f, c, x);
+    else if (hp < 4.0f) rgb = make_float3(0.0f, x, c);
+    else if (hp < 5.0f) rgb = make_float3(x, 0.0f, c);
+    else                rgb = make_float3(c, 0.0f, x);
+    float m = l - c * 0.5f;
+    return make_float3(rgb.x + m, rgb.y + m, rgb.z + m);
+}
+
+// 调色内核（亮度、对比度、饱和度、白平衡、色相偏移）
+__global__ void colorCorrectionKernel(const float3* input, float3* output,
+    int width, int height,
+    float brightness, float contrast, float saturation,
+    float3 whiteBalance, float hueShift) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    int idx = y * width + x;
+
+    float3 color = input[idx];
+
+    // 白平衡
+    color.x *= whiteBalance.x;
+    color.y *= whiteBalance.y;
+    color.z *= whiteBalance.z;
+
+    // 亮度（偏移）
+    color = make_float3(color.x + brightness, color.y + brightness, color.z + brightness);
+
+    // 对比度 (c = (c-0.5)*contrast + 0.5)
+    color = make_float3((color.x - 0.5f) * contrast + 0.5f,
+        (color.y - 0.5f) * contrast + 0.5f,
+        (color.z - 0.5f) * contrast + 0.5f);
+
+    // 色相偏移
+    if (fabsf(hueShift) > 1e-5f) {
+        float h, s, l;
+        rgb2hsl(color, h, s, l);
+        h = fmodf(h + hueShift, 360.0f);
+        if (h < 0.0f) h += 360.0f;
+        color = hsl2rgb(h, s, l);
+    }
+
+    // 饱和度
+    float lum = 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
+    color = make_float3(lum + (color.x - lum) * saturation,
+        lum + (color.y - lum) * saturation,
+        lum + (color.z - lum) * saturation);
+
+    // Clamp
+    color.x = fminf(fmaxf(color.x, 0.0f), 1.0f);
+    color.y = fminf(fmaxf(color.y, 0.0f), 1.0f);
+    color.z = fminf(fmaxf(color.z, 0.0f), 1.0f);
+
+    output[idx] = color;
+}
+
+// 主机端调色函数
+void applyColorCorrection(Frame& frame, float brightness, float contrast,
+    float saturation, float3 whiteBalance, float hueShift) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    // 参数钳制
+    brightness = fminf(fmaxf(brightness, -1.0f), 1.0f);
+    contrast = fminf(fmaxf(contrast, 0.0f), 2.0f);
+    saturation = fminf(fmaxf(saturation, 0.0f), 2.0f);
+    whiteBalance.x = fminf(fmaxf(whiteBalance.x, 0.0f), 3.0f);
+    whiteBalance.y = fminf(fmaxf(whiteBalance.y, 0.0f), 3.0f);
+    whiteBalance.z = fminf(fmaxf(whiteBalance.z, 0.0f), 3.0f);
+    hueShift = fminf(fmaxf(hueShift, -180.0f), 180.0f);
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    float3* d_input = nullptr, * d_output = nullptr;
+    cudaMalloc(&d_input, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    if (!d_input || !d_output) {
+        cudaFree(d_input); cudaFree(d_output);
+        return;
+    }
+
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i)
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    cudaMemcpy(d_input, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+    colorCorrectionKernel <<< grid, block >>> (d_input, d_output,
+        frame.width, frame.height,
+        brightness, contrast, saturation,
+        whiteBalance, hueShift);
+
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i)
+        frame.pixels[i] = float3ToPixel(h_output[i]);
+
+    cudaFree(d_input);
+    cudaFree(d_output);
+    cudaDeviceSynchronize();
+}
+
+// 风格化分级内核（预设混合）
+__global__ void colorGradingKernel(const float3* input, float3* output,
+    int width, int height,
+    int style, float intensity, float3 customColor) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    int idx = y * width + x;
+
+    float3 color = input[idx];
+    float3 graded = color;
+
+    // 根据风格计算目标颜色
+    switch (style) {
+    case 0: { // 冷色调：增强蓝色，降低红色
+        graded = make_float3(color.x * 0.8f, color.y * 1.0f, color.z * 1.2f);
+        break;
+    }
+    case 1: { // 暖色调：增强红色和绿色，降低蓝色
+        graded = make_float3(color.x * 1.2f, color.y * 1.1f, color.z * 0.8f);
+        break;
+    }
+    case 2: { // 黑白（灰度）
+        float lum = 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
+        graded = make_float3(lum, lum, lum);
+        break;
+    }
+    case 3: { // 复古（Sepia）
+        float r = color.x, g = color.y, b = color.z;
+        graded = make_float3(r * 0.393f + g * 0.769f + b * 0.189f,
+            r * 0.349f + g * 0.686f + b * 0.168f,
+            r * 0.272f + g * 0.534f + b * 0.131f);
+        break;
+    }
+    case 4: { // 赛博朋克：青/粉色调
+        graded = make_float3(color.x * 1.2f, color.y * 0.8f, color.z * 1.5f);
+        break;
+    }
+    case 5: { // 自定义色调：叠加颜色
+        graded = make_float3(color.x * customColor.x,
+            color.y * customColor.y,
+            color.z * customColor.z);
+        break;
+    }
+    default:
+        graded = color;
+        break;
+    }
+
+    // 与原图混合（强度）
+    float3 result;
+    result.x = color.x * (1.0f - intensity) + graded.x * intensity;
+    result.y = color.y * (1.0f - intensity) + graded.y * intensity;
+    result.z = color.z * (1.0f - intensity) + graded.z * intensity;
+
+    // Clamp
+    result.x = fminf(fmaxf(result.x, 0.0f), 1.0f);
+    result.y = fminf(fmaxf(result.y, 0.0f), 1.0f);
+    result.z = fminf(fmaxf(result.z, 0.0f), 1.0f);
+
+    output[idx] = result;
+}
+
+// 主机端颜色分级函数
+void applyColorGrading(Frame& frame, int style, float intensity, float3 customColor) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.pixels.empty())
+        return;
+
+    style = min(max(style, 0), 5);
+    intensity = fminf(fmaxf(intensity, 0.0f), 1.0f);
+    customColor.x = fminf(fmaxf(customColor.x, 0.0f), 2.0f);
+    customColor.y = fminf(fmaxf(customColor.y, 0.0f), 2.0f);
+    customColor.z = fminf(fmaxf(customColor.z, 0.0f), 2.0f);
+
+    int totalPixels = frame.width * frame.height;
+    size_t imgSize = totalPixels * sizeof(float3);
+
+    float3* d_input = nullptr, * d_output = nullptr;
+    cudaMalloc(&d_input, imgSize);
+    cudaMalloc(&d_output, imgSize);
+    if (!d_input || !d_output) {
+        cudaFree(d_input); cudaFree(d_output);
+        return;
+    }
+
+    std::vector<float3> h_image(totalPixels);
+    for (int i = 0; i < totalPixels; ++i)
+        h_image[i] = pixelToFloat3(frame.pixels[i]);
+    cudaMemcpy(d_input, h_image.data(), imgSize, cudaMemcpyHostToDevice);
+
+    dim3 block(16, 16);
+    dim3 grid((frame.width + block.x - 1) / block.x, (frame.height + block.y - 1) / block.y);
+    colorGradingKernel <<< grid, block >>> (d_input, d_output,
+        frame.width, frame.height,
+        style, intensity, customColor);
+
+    std::vector<float3> h_output(totalPixels);
+    cudaMemcpy(h_output.data(), d_output, imgSize, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < totalPixels; ++i)
+        frame.pixels[i] = float3ToPixel(h_output[i]);
 
     cudaFree(d_input);
     cudaFree(d_output);

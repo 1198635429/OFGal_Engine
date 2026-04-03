@@ -133,3 +133,175 @@ void _EventBus::subscribe_RenderAndPrint_ANISOTROPIC(RenderAndPrint_ANISOTROPIC_
 {
     handlers_RenderAndPrint_ANISOTROPIC.push_back(handler);
 }
+Frame _EventBus::publish_Render_A_Frame(const LevelData& currentLevel, TextureSamplingMethod samplingMethod, int MSAA_Multiple)
+{
+    for (auto& handler : handlers_Render_A_Frame)
+    {
+        return handler(currentLevel, samplingMethod, MSAA_Multiple);
+    }
+}
+void _EventBus::subscribe_Render_A_Frame(Render_A_Frame_Handler handler)
+{
+    handlers_Render_A_Frame.push_back(handler);
+}
+Frame _EventBus::publish_Render_A_Frame_ANISOTROPIC(const LevelData& currentLevel, int anisoLevel, int MSAA_Multiple)
+{
+    for (auto& handler : handlers_Render_A_Frame_ANISOTROPIC)
+    {
+        return handler(currentLevel, anisoLevel, MSAA_Multiple);
+    }
+}
+void _EventBus::subscribe_Render_A_Frame_ANISOTROPIC(Render_A_Frame_ANISOTROPIC_Handler handler)
+{
+    handlers_Render_A_Frame_ANISOTROPIC.push_back(handler);
+}
+void _EventBus::publish_Print_A_Frame(const Frame& frame)
+{
+    for (auto& handler : handlers_Print_A_Frame)
+    {
+        handler(frame);
+    }
+}
+void _EventBus::subscribe_Print_A_Frame(Print_A_Frame_Handler handler)
+{
+    handlers_Print_A_Frame.push_back(handler);
+}
+void _EventBus::publish_applyBloom(Frame& frame,
+    float threshold,
+    float intensity,
+    int blurRadius,
+    float sigma)
+{
+    for (auto& handler : handlers_applyBloom)
+    {
+        handler(frame, threshold, intensity, blurRadius, sigma);
+    }
+}
+void _EventBus::subscribe_applyBloom(applyBloom_Handler handler)
+{
+    handlers_applyBloom.push_back(handler);
+}
+void _EventBus::publish_applyBlur(Frame& frame, int radius, float sigma, int direction)
+{
+    for (auto& handler : handlers_applyBlur)
+    {
+        handler(frame, radius, sigma, direction);
+    }
+}
+void _EventBus::subscribe_applyBlur(applyBlur_Handler handler)
+{
+    handlers_applyBlur.push_back(handler);
+}
+void _EventBus::publish_applyChromaticAberration(Frame& frame, float strength, int mode, float centerX, float centerY)
+{
+    for (auto& handler : handlers_applyChromaticAberration)
+    {
+        handler(frame, strength, mode, centerX, centerY);
+    }
+}
+void _EventBus::subscribe_applyChromaticAberration(applyChromaticAberration_Handler handler)
+{
+    handlers_applyChromaticAberration.push_back(handler);
+}
+void _EventBus::publish_applyColorCorrection(Frame& frame,
+    float brightness,
+    float contrast,
+    float saturation,
+    float3 whiteBalance,
+    float hueShift)
+{
+    for (auto& handler : handlers_applyColorCorrection)
+    {
+        handler(frame, brightness, contrast, saturation, whiteBalance, hueShift);
+    }
+}
+void _EventBus::subscribe_applyColorCorrection(applyColorCorrection_Handler handler)
+{
+    handlers_applyColorCorrection.push_back(handler);
+}
+void _EventBus::publish_applyColorGrading(Frame& frame, int style, float intensity, float3 customColor)
+{
+    for (auto& handler : handlers_applyColorGrading)
+    {
+        handler(frame, style, intensity, customColor);
+    }
+}
+void _EventBus::subscribe_applyColorGrading(applyColorGrading_Handler handler)
+{
+    handlers_applyColorGrading.push_back(handler);
+}
+void _EventBus::publish_applyFXAA(Frame& frame,
+    float edgeThreshold,
+    float edgeThresholdMin,
+    float spanMax,
+    float reduceMul,
+    float reduceMin)
+{
+    for (auto& handler : handlers_applyFXAA)
+    {
+        handler(frame, edgeThreshold, edgeThresholdMin, spanMax, reduceMul, reduceMin);
+    }
+}
+void _EventBus::subscribe_applyFXAA(applyFXAA_Handler handler)
+{
+    handlers_applyFXAA.push_back(handler);
+}
+void _EventBus::publish_applyFilmGrain(Frame& frame, float intensity, int grainSize, bool dynamic, int frameId)
+{
+    for (auto& handler : handlers_applyFilmGrain)
+    {
+        handler(frame, intensity, grainSize, dynamic, frameId);
+    }
+}
+void _EventBus::subscribe_applyFilmGrain(applyFilmGrain_Handler handler)
+{
+    handlers_applyFilmGrain.push_back(handler);
+}
+void _EventBus::publish_applyLensDistortion(Frame& frame, float strength, float centerX, float centerY)
+{
+    for (auto& handler : handlers_applyLensDistortion)
+    {
+        handler(frame, strength, centerX, centerY);
+    }
+}
+void _EventBus::subscribe_applyLensDistortion(applyLensDistortion_Handler handler)
+{
+    handlers_applyLensDistortion.push_back(handler);
+}
+void _EventBus::publish_applySMAA(Frame& frame,
+    float edgeThreshold,
+    int maxSearchSteps,
+    bool enableDiag)
+{
+    for (auto& handler : handlers_applySMAA)
+    {
+        handler(frame, edgeThreshold, maxSearchSteps, enableDiag);
+    }
+}
+void _EventBus::subscribe_applySMAA(applySMAA_Handler handler)
+{
+    handlers_applySMAA.push_back(handler);
+}
+void _EventBus::publish_applySharpen(Frame& frame, float strength, int radius, float sigma)
+{
+    for (auto& handler : handlers_applySharpen)
+    {
+        handler(frame, strength, radius, sigma);
+    }
+}
+void _EventBus::subscribe_applySharpen(applySharpen_Handler handler)
+{
+    handlers_applySharpen.push_back(handler);
+}
+void _EventBus::publish_applyVignette(Frame& frame, float intensity, float innerRadius, float outerRadius,
+    float centerX, float centerY, float exponent)
+{
+    for (auto& handler : handlers_applyVignette)
+    {
+        handler(frame, intensity, innerRadius, outerRadius, centerX, centerY, exponent);
+    }
+}
+void _EventBus::subscribe_applyVignette(applyVignette_Handler handler)
+{
+    handlers_applyVignette.push_back(handler);
+}

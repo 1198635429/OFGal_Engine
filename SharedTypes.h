@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <unordered_map>
 #include <optional>
+#include <math.h>
+#include <algorithm>
+#include <cuda_runtime.h>
 
 /*
 =================================================
