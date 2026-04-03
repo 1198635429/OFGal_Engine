@@ -93,11 +93,11 @@
     <ClCompile Include="GameVM.cpp">
       <Filter>Source Files\GameVM</Filter>
     </ClCompile>
-    <ClCompile Include="InputCollector.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="InputSystem.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\InputSystem</Filter>
+    </ClCompile>
+    <ClCompile Include="InputCollector.cpp">
+      <Filter>Source Files\InputSystem</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -137,17 +137,17 @@
     <ClInclude Include="FrameProcessing.cuh">
       <Filter>Header Files\CUDA_SpeedUp</Filter>
     </ClInclude>
+    <ClInclude Include="KeyCode.h">
+      <Filter>Header Files\InputSystem</Filter>
+    </ClInclude>
     <ClInclude Include="InputCollector.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\InputSystem</Filter>
     </ClInclude>
     <ClInclude Include="InputEvent.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\InputSystem</Filter>
     </ClInclude>
     <ClInclude Include="InputSystem.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="KeyCode.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\InputSystem</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
