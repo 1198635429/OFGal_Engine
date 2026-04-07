@@ -141,6 +141,7 @@
     <ClCompile Include="ProjectStructureGetter.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />
     <ClCompile Include="SoundSystem.cpp" />
+    <ClCompile Include="WindowsSystem.cpp" />
     <ClCompile Include="_EventBus.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -170,6 +171,7 @@
     <ClInclude Include="SharedTypes.h" />
     <ClInclude Include="SoundEvents.h" />
     <ClInclude Include="SRP.cuh" />
+    <ClInclude Include="WindowsSystem.h" />
     <ClInclude Include="_EventBus.h" />
     <ClInclude Include="SoundSystem.h" />
   </ItemGroup>
