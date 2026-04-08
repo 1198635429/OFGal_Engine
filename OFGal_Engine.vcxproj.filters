@@ -102,6 +102,9 @@
     <ClCompile Include="SoundSystem.cpp">
       <Filter>Source Files\SoundSystem</Filter>
     </ClCompile>
+    <ClCompile Include="WindowsSystem.cpp">
+      <Filter>Source Files\WindowsSystem</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h">
@@ -158,9 +161,18 @@
     <ClInclude Include="SoundEvents.h">
       <Filter>Header Files\SoundSystem</Filter>
     </ClInclude>
+    <ClInclude Include="WindowsSystem.h">
+      <Filter>Header Files\WindowsSystem</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="莉可丽丝1.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="1218817058308192.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="rifumei.bmp">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

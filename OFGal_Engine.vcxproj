@@ -176,6 +176,8 @@
     <ClInclude Include="SoundSystem.h" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="1218817058308192.bmp" />
+    <Image Include="rifumei.bmp" />
     <Image Include="莉可丽丝1.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
