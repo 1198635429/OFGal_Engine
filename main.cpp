@@ -35,6 +35,7 @@ int main() {
 
 	pWindowsSystem->OpenProjectStructureViewer("E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\ProjectStructureViewer.exe");
 	pWindowsSystem->RefreshProjectStructureViewer();
+	pWindowsSystem->CloseProjectStructureViewer();
 
 	//system("pause");
 	running = false;

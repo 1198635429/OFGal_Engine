@@ -9,6 +9,7 @@
 #include <optional>
 #include <math.h>
 #include <algorithm>
+#include <windows.h>
 #include <cuda_runtime.h>
 
 /*
@@ -314,4 +315,44 @@ struct AudioClip {
 	AudioClip(const std::string& path, bool loop)
 		: path(path), loop(loop), volume(1.0f), isPaused(false) {
 	}
+};
+
+/* 
+===================================================
+窗口管理系统结构体定义
+===================================================
+*/
+// 单个共享内存块描述
+struct SharedMemBlock {
+	HANDLE hSharedMem = NULL;   // 文件映射句柄
+	char* pView = nullptr;      // 映射视图指针
+	DWORD size = 0;             // 块大小（字节）
+	bool isReadOnly = false;    // 是否只读（用于从子进程接收数据的块，主进程只读）
+};
+
+// 子进程信息
+struct ChildProcessInfo {
+	HANDLE hProcess = NULL;             // 进程句柄
+	HANDLE hThread = NULL;              // 主线程句柄
+	DWORD processId = 0;                // 进程ID（便于外部使用）
+	std::unordered_map<std::string, HANDLE> events;        // 命名事件句柄（主进程创建）
+	std::unordered_map<std::string, SharedMemBlock> sharedMems; // 共享内存块
+
+	// 以下用于双向通信时的反向事件（由子进程创建，主进程打开）
+	std::unordered_map<std::string, HANDLE> childEvents;   // 子进程创建的事件句柄
+};
+
+// 子进程启动配置
+struct ChildProcessConfig {
+	std::string processKey;                     // 唯一标识符（如 "ProjectStructureViewer"）
+	std::string exePath;                        // 可执行文件路径
+	std::string commandLineArgs;                // 额外命令行参数（不含 exe 本身）
+	bool createNewConsole = true;               // 是否创建新控制台窗口（默认是）
+	bool redirectStdIO = true;                  // 是否重定向标准 IO 到新控制台（仅当 createNewConsole 为 true 时有效）
+
+	// 需要创建的共享内存块配置：块名 -> 大小（字节）
+	std::unordered_map<std::string, DWORD> sharedMemBlocks;
+
+	// 需要创建的事件配置：事件名 -> 初始状态（false=未触发）
+	std::unordered_map<std::string, bool> eventsToCreate;
 };

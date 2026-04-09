@@ -1,29 +1,30 @@
 // Copyright 2026 MrSeagull. All Rights Reserved.
 #include <iostream>
 #include <windows.h>
+#include <vector>
+#include <string>
 #include "ProjectStructureGetter.h"
+#include "StructurePrinter.h"
 #include "SharedTypes.h"
 
 // 设置控制台窗口位置，大小
 void SetupConsoleWindow() {
     HWND hwndConsole = GetConsoleWindow();
     if (hwndConsole) {
-        // 设置窗口位置为左上角，大小为 400x400 像素
         SetWindowPos(hwndConsole, nullptr, 0, 0, 400, 400, SWP_NOZORDER | SWP_NOACTIVATE);
 
-        // 获取控制台输出句柄
         HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
         if (hConsole != INVALID_HANDLE_VALUE) {
             CONSOLE_FONT_INFO fontInfo;
             if (GetCurrentConsoleFont(hConsole, FALSE, &fontInfo)) {
-                // 根据字体大小计算缓冲区字符行列数
                 COORD bufferSize;
-                bufferSize.X = static_cast<SHORT>(400 / fontInfo.dwFontSize.X);
-                bufferSize.Y = static_cast<SHORT>(400 / fontInfo.dwFontSize.Y);
+                //bufferSize.X = static_cast<SHORT>(400 / fontInfo.dwFontSize.X);
+                //bufferSize.Y = static_cast<SHORT>(400 / fontInfo.dwFontSize.Y);
+                bufferSize.X = 120;
+                bufferSize.Y = 1000;
                 SetConsoleScreenBufferSize(hConsole, bufferSize);
             }
             else {
-                // 获取字体失败时，使用默认大小
                 COORD defaultSize = { 80, 25 };
                 SetConsoleScreenBufferSize(hConsole, defaultSize);
             }
@@ -32,8 +33,7 @@ void SetupConsoleWindow() {
 }
 
 int main(int argc, char* argv[]) {
-    ProjectStructure* pProjectStructure = new ProjectStructure;
-
+    ProjectStructure* pProjectStructure = nullptr;
     SetupConsoleWindow();
 
     const char* projectRoot = nullptr;
@@ -42,13 +42,27 @@ int main(int argc, char* argv[]) {
         std::cout << "项目根目录: " << projectRoot << std::endl;
     }
 
-    // 打开事件...
+    // 打开事件
     HANDLE hExitEvent = OpenEventA(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE,
         "Global\\OFGal_Engine_ProjectStructureViewer_Exit");
     HANDLE hUpdateEvent = OpenEventA(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE,
         "Global\\OFGal_Engine_ProjectStructureViewer_Refresh");
     if (!hExitEvent || !hUpdateEvent) {
         std::cerr << "打开事件失败，错误码: " << GetLastError() << std::endl;
+        return -1;
+    }
+    
+    // 打开共享内存
+    HANDLE hMapFile = OpenFileMappingA(FILE_MAP_READ, FALSE,
+        "Global\\OFGal_Engine_ProjectStructureViewer_Path");
+    if (!hMapFile) {
+        std::cerr << "打开共享内存失败，错误码: " << GetLastError() << std::endl;
+        return -1;
+    }
+    char* pSharedBuf = static_cast<char*>(MapViewOfFile(hMapFile, FILE_MAP_READ, 0, 0, MAX_PATH));
+    if (!pSharedBuf) {
+        std::cerr << "映射共享内存视图失败，错误码: " << GetLastError() << std::endl;
+        CloseHandle(hMapFile);
         return -1;
     }
 
@@ -70,29 +84,24 @@ int main(int argc, char* argv[]) {
             keepRunning = false;
         }
         else if (waitResult == WAIT_OBJECT_0 + 1) {
-            std::cout << "收到更新信号，读取管道数据..." << std::endl;
+            std::cout << "收到更新信号，刷新文件夹列表..." << std::endl;
 
-            // ---------- 读取主进程发来的路径 ----------
-            HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
-            uint32_t len = 0;
-            DWORD bytesRead = 0;
-            if (ReadFile(hStdin, &len, sizeof(len), &bytesRead, NULL) &&
-                bytesRead == sizeof(len) && len > 0) {
-                std::vector<char> buffer(len + 1, '\0');
-                if (ReadFile(hStdin, buffer.data(), len, &bytesRead, NULL) &&
-                    bytesRead == len) {
-                    std::string newPath(buffer.data());
-                    std::cout << "收到新路径: " << newPath << std::endl;
-                    // TODO: 后续可根据 newPath 刷新显示
-                }
-                else {
-                    std::cerr << "读取路径内容失败" << std::endl;
-                }
+            // 安全读取：最多拷贝 MAX_PATH-1 个字符
+            char localPath[MAX_PATH] = { 0 };
+            memcpy(localPath, pSharedBuf, MAX_PATH - 1);
+            localPath[MAX_PATH - 1] = '\0';
+            std::string newPath(localPath);
+
+            if (newPath.empty()) {
+                std::cout << "警告：共享内存中路径为空！" << std::endl;
             }
             else {
-                std::cerr << "读取路径长度失败或长度为0" << std::endl;
+                std::cout << "当前项目路径: " << newPath << std::endl;
+                pProjectStructure = new ProjectStructure(GetProjectStructure(newPath.c_str()));
+                system("cls");
+                PrintProjectStructureTree(*pProjectStructure);
             }
-            // ------------------------------------------------
+            std::cout.flush();
         }
         else if (waitResult == WAIT_FAILED) {
             std::cerr << "WaitForMultipleObjects 失败，错误码: " << GetLastError() << std::endl;
@@ -104,6 +113,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    UnmapViewOfFile(pSharedBuf);
+    CloseHandle(hMapFile);
     CloseHandle(hExitEvent);
     CloseHandle(hUpdateEvent);
     delete pProjectStructure;
