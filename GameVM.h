@@ -12,10 +12,14 @@ public:
         return instance;
 	}
 
-	void testfunc();	//仅用于测试，后续可删除
 private:
-	GameVM() = default;
-	~GameVM() = default;
+	GameVM() {
 
-	std::vector<LevelData> levels;
+	}
+	~GameVM() {
+
+	}
+
+	LevelData currentLevel;
+	char* currentProjectDirectory;
 };
