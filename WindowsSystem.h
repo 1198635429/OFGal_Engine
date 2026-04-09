@@ -17,6 +17,7 @@ public:
 	}
 private:
 	std::vector<LevelData> levels;
+	char* currentProjectDirectory;
 
 	WindowsSystem() {
 

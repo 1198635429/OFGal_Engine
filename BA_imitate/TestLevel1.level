@@ -1,0 +1,69 @@
+﻿{
+	"TestLevel1": {
+		"SubObjects": [ "background", "AjitaniHifumi" ],
+		"background": {
+			"ParObject" : "TestLevel1",
+			"Transform": {
+				"Location": {
+					"x": 0.0,
+					"y": 0.0,
+					"z": 5
+				},
+				"Rotation": {
+					"r": 0.0
+				},
+				"Scale": {
+					"x": 0.7,
+					"y": 0.7
+				}
+			},
+			"Picture": {
+				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\BA_imitate\\1218817058308192.bmp",
+				"Location": {
+					"x": 0.0,
+					"y": 0.0,
+					"z": 5
+				},
+				"Rotation": {
+					"r": 0.0
+				},
+				"Size": {
+					"x": 0.0,
+					"y": 0.0
+				}
+			}
+		},
+		"AjitaniHifumi": {
+			"ParObject": "TestLevel1",
+			"Transform": {
+				"Location": {
+					"x": 0.0,
+					"y": 0.0,
+					"z": 1
+				},
+				"Rotation": {
+					"r": 0.0
+				},
+				"Scale": {
+					"x": 0.5,
+					"y": 0.5
+				}
+			},
+			"Picture": {
+				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\BA_imitate\\rifumei.bmp",
+				"Location": {
+					"x": 900.0,
+					"y": 50.0,
+					"z": 0
+				},
+				"Rotation": {
+					"r": 0.0
+				},
+				"Size": {
+					"x": 0.0,
+					"y": 0.0
+				}
+			}
+		}
+	}
+}
