@@ -180,6 +180,9 @@
     <Image Include="rifumei.bmp" />
     <Image Include="莉可丽丝1.bmp" />
   </ItemGroup>
+  <ItemGroup>
+    <Media Include="acane_madder___Think_of_You.wav" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 13.0.targets" />

@@ -8,6 +8,8 @@
 
 class SoundSystem {
 public:
+    SoundSystem(const SoundSystem&) = delete;
+    SoundSystem& operator=(const SoundSystem&) = delete;
     // 获取 SoundSystem 实例（单例模式）
     static SoundSystem& getInstance()
     {

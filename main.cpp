@@ -8,6 +8,7 @@
 #include <thread>
 #include"InputCollector.h"
 #include "FileSystem.h"
+#include "SoundSystem.h"
 #include "GameVM.h"
 #include "RenderingSystem.h"
 #include "WindowsSystem.h"
@@ -21,12 +22,15 @@ void InputThread(InputCollector* collector) {
 int main() {
 	_EventBus* pEventBus = &_EventBus::getInstance();
 	FileSystem* pFileSystem = &FileSystem::getInstance();
+	SoundSystem* pSoundSystem = &SoundSystem::getInstance();
 	GameVM* pGameVM = &GameVM::getInstance();
 	RenderingSystem* pRenderingSystem = &RenderingSystem::getInstance();
 
 	InputSystem inputSystem;
 	InputCollector collector(&inputSystem);
 	std::thread inputThread(InputThread, &collector);
+
+	//_EventBus::getInstance().publish_SoundPlay("E:/Projects/C++Projects/OFGal_Engine/acane_madder___Think_of_You.wav");
 
 	//system("pause");
 	running = false;
