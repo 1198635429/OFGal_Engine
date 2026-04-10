@@ -127,6 +127,7 @@
     <ClInclude Include="AppController.h" />
     <ClInclude Include="ConsoleManager.h" />
     <ClInclude Include="Debug.h" />
+    <ClInclude Include="FolderViewerManager.h" />
     <ClInclude Include="InputHandler.h" />
     <ClInclude Include="IpcClient.h" />
     <ClInclude Include="ProjectStructureGetter.h" />
@@ -136,6 +137,7 @@
   <ItemGroup>
     <ClCompile Include="AppController.cpp" />
     <ClCompile Include="ConsoleManager.cpp" />
+    <ClCompile Include="FolderViewerManager.cpp" />
     <ClCompile Include="InputHandler.cpp" />
     <ClCompile Include="IpcClient.cpp" />
     <ClCompile Include="main.cpp" />
