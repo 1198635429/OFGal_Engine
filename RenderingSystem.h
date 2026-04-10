@@ -29,8 +29,8 @@ public:
     void Print_A_Frame(const Frame& frame);
 private:
     RenderingSystem() {
-        //initializeConsoleDrawer();
-        //CanvasSize = getMaxCanvasSize();
+        initializeConsoleDrawer();
+        CanvasSize = getMaxCanvasSize();
 
         _EventBus::getInstance().subscribe_RenderAndPrint(
             [this](const LevelData& level, TextureSamplingMethod method, int msaa) {
