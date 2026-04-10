@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{6c0d6793-057f-4f88-bf67-b55d47e8a257}</ProjectGuid>
-    <RootNamespace>ProjectStructureViewer</RootNamespace>
+    <ProjectGuid>{4717fa13-6627-4101-a7ed-d94757e521eb}</ProjectGuid>
+    <RootNamespace>FolderViewer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -102,7 +102,6 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -124,23 +123,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="AppController.h" />
-    <ClInclude Include="ConsoleManager.h" />
-    <ClInclude Include="Debug.h" />
-    <ClInclude Include="InputHandler.h" />
-    <ClInclude Include="IpcClient.h" />
-    <ClInclude Include="ProjectStructureGetter.h" />
-    <ClInclude Include="SharedTypes.h" />
-    <ClInclude Include="TreeView.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="AppController.cpp" />
-    <ClCompile Include="ConsoleManager.cpp" />
-    <ClCompile Include="InputHandler.cpp" />
-    <ClCompile Include="IpcClient.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="ProjectStructureGetter.cpp" />
-    <ClCompile Include="TreeView.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

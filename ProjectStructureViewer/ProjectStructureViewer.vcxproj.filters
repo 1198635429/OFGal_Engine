@@ -21,7 +21,22 @@
     <ClInclude Include="ProjectStructureGetter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="StructurePrinter.h">
+    <ClInclude Include="Debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConsoleManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="InputHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IpcClient.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TreeView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AppController.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -32,7 +47,19 @@
     <ClCompile Include="ProjectStructureGetter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="StructurePrinter.cpp">
+    <ClCompile Include="ConsoleManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="InputHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IpcClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TreeView.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AppController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
