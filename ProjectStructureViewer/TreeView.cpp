@@ -222,3 +222,19 @@ void TreeView::JumpToLine(int line) {
     m_highlightLine = line;
     Render(m_highlightLine);
 }
+
+int TreeView::FindLineByPath(const std::string& path) const {
+    // 规范化传入的路径（去除尾部斜杠，统一格式）
+    std::string normPath = path;
+    while (!normPath.empty() && (normPath.back() == '\\' || normPath.back() == '/'))
+        normPath.pop_back();
+
+    for (size_t i = 0; i < m_lineToPath.size(); ++i) {
+        std::string linePath = m_lineToPath[i];
+        while (!linePath.empty() && (linePath.back() == '\\' || linePath.back() == '/'))
+            linePath.pop_back();
+        if (linePath == normPath)
+            return static_cast<int>(i);
+    }
+    return -1;
+}

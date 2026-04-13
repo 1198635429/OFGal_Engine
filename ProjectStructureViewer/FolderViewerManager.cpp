@@ -232,3 +232,11 @@ bool FolderViewerManager::IsRunning() const {
     }
     return false;
 }
+
+std::string FolderViewerManager::GetCurrentSharedPath() const {
+    if (!m_pSharedView) return "";
+    char buf[SHARED_MEM_SIZE];
+    memcpy(buf, m_pSharedView, SHARED_MEM_SIZE);
+    buf[SHARED_MEM_SIZE - 1] = '\0';
+    return std::string(buf);
+}

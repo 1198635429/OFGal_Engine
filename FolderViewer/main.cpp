@@ -1,8 +1,7 @@
-#include <iostream>
+// Copyright 2026 MrSeagull. All Rights Reserved.
+#include "FolderViewer.h"
 
 int main() {
-	std::cout << "Hello World!" << std::endl;
-	system("pause");
-
-	return 0;
+    FolderViewer app;
+    return app.Run();
 }

@@ -5,7 +5,7 @@
 
 WindowsSystem::WindowsSystem() {
     // 初始化项目目录（测试用）
-    std::string testpath = "E:\\Projects\\C++Projects\\OFGal_Engine";
+    std::string testpath = "D:\\PCL";
     size_t len = testpath.size() + 1;
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, testpath.c_str());

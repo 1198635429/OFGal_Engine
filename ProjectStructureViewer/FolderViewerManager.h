@@ -28,6 +28,9 @@ public:
     // 返回 true 表示有变更，并触发回调（如果已设置）
     bool PollFolderChange();
 
+    // 获取共享内存中当前存储的路径（子进程可能写入）
+    std::string GetCurrentSharedPath() const;
+
     // 设置文件夹变更回调
     void SetOnFolderChanged(FolderChangeCallback cb) { m_onFolderChanged = std::move(cb); }
 

@@ -56,14 +56,34 @@ void AppController::OnIpcExit() {
 }
 
 void AppController::OnFolderChanged() {
-    // TODO: 用户在此处实现当 FolderViewer 检测到文件夹内容变化时的后续操作
-    // 例如：重新扫描当前选中的目录、刷新显示等
     DEBUG_LOG("AppController: FolderViewer reported a change in the folder.\n");
-    // 示例：可以重新获取当前路径的结构并更新视图
-    // if (m_project) {
-    //     std::string currentPath = m_view.GetSelectedInfo().absolutePath;
-    //     // 仅更新该文件夹的子结构...
-    // }
+
+    if (!m_folderViewerMgr || !m_project) return;
+
+    // 1. 读取子进程写入共享内存的变更路径
+    std::string changedPath = m_folderViewerMgr->GetCurrentSharedPath();
+    if (changedPath.empty()) {
+        DEBUG_LOG("AppController: Shared path is empty, nothing to select.\n");
+        return;
+    }
+
+    DEBUG_LOG("AppController: Received changed path: " << changedPath << "\n");
+
+    // 2. 在树视图中查找并选中该路径
+    int line = m_view.FindLineByPath(changedPath);
+    if (line >= 0) {
+        m_view.JumpToLine(line);
+        DEBUG_LOG("AppController: Selected line " << line << " for path: " << changedPath << "\n");
+    }
+    else {
+        DEBUG_LOG("AppController: Path not found in current tree view: " << changedPath << "\n");
+        // 即使没找到，仍然尝试通知子进程（可能路径在根外，让子进程自行处理）
+    }
+
+    // 3. 通知子进程更新当前显示的路径（确保同步）
+    if (m_folderViewerStarted) {
+        m_folderViewerMgr->NotifyPathChange(changedPath);
+    }
 }
 
 int AppController::Run(const char* initialPathFromArg) {

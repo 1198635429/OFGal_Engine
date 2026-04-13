@@ -32,6 +32,8 @@ public:
     // 根据行号获取文件夹绝对路径
     std::string GetPathByLine(int line) const;
 
+    int FindLineByPath(const std::string& path) const;
+
     // 移动高亮行（内部调用Render）
     void MoveHighlightUp();
     void MoveHighlightDown();
