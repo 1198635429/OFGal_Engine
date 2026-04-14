@@ -19,10 +19,10 @@ ConsoleManager::ConsoleManager()
     }
 }
 
-void ConsoleManager::SetupWindow() {
+void ConsoleManager::SetupWindow(int screenWidth, int workAreaHeight) {
     HWND hwndConsole = GetConsoleWindow();
     if (hwndConsole) {
-        SetWindowPos(hwndConsole, nullptr, 0, 0, 400, 400, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(hwndConsole, nullptr, 0, double(double(workAreaHeight) * 0.7), double(double(screenWidth) * 0.1374), double(workAreaHeight) - double(double(workAreaHeight) * 0.7), SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     if (m_hConsoleOut == INVALID_HANDLE_VALUE) return;

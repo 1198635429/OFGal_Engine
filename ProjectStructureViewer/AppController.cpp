@@ -11,7 +11,12 @@ AppController::AppController()
     , m_running(false)
     , m_folderViewerStarted(false)
 {
-    m_console.SetupWindow();
+    RECT rcWork;
+    if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWork, 0)) {
+        workAreaHeight = rcWork.bottom - rcWork.top;
+    }
+
+    m_console.SetupWindow(screenWidth, workAreaHeight);
     m_ipc.SetOnUpdate([this](const std::string& path) { OnIpcUpdate(path); });
     m_ipc.SetOnExit([this]() { OnIpcExit(); });
 

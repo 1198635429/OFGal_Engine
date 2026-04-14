@@ -28,6 +28,28 @@ FolderViewer::FolderViewer()
     , m_hEventExit(nullptr)
     , m_running(false)
 {
+    screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    RECT rcWork;
+    if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWork, 0)) {
+        workAreaHeight = rcWork.bottom - rcWork.top;
+    }
+    else {
+        workAreaHeight = GetSystemMetrics(SM_CYSCREEN); // 降级方案
+    }
+
+    // === 调整当前控制台窗口的位置和大小 ===
+    HWND hConsoleWnd = GetConsoleWindow();
+    if (hConsoleWnd) {
+        int windowX = double(double(screenWidth) * 0.1374);
+        int windowY = double(double(workAreaHeight) * 0.7);
+        int windowWidth = double(double(screenWidth) * 0.6613);
+        int windowHeight = double(workAreaHeight) - double(double(workAreaHeight) * 0.7);
+
+        SetWindowPos(hConsoleWnd, nullptr,
+            windowX, windowY,
+            windowWidth, windowHeight,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     m_inputSystem = std::make_unique<InputSystem>();
     m_inputCollector = std::make_unique<InputCollector>(m_inputSystem.get());
 

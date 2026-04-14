@@ -13,7 +13,7 @@ public:
     int GetCursorRow() const;
 
     // 初始化控制台窗口（位置、大小、VT模式、禁用快速编辑）
-    void SetupWindow();
+    void SetupWindow(int screenWidth, int workAreaHeight);
 
     // 检测是否支持虚拟终端（ANSI转义）
     bool IsVTSupported() const { return m_vtSupported; }

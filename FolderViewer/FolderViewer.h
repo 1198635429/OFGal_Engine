@@ -14,6 +14,9 @@ class InputCollector;
 
 class FolderViewer {
 public:
+    int screenWidth = 0;
+    int workAreaHeight = 0;
+
     FolderViewer();
     ~FolderViewer();
 
