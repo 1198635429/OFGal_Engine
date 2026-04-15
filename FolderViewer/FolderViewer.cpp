@@ -246,14 +246,14 @@ void FolderViewer::RefreshDisplay(const std::string& folderPath) {
     for (const auto& name : folders) {
         DisplayItem item;
         item.name = name;
-        item.fullPath = folderPath + "\\" + name;
+        item.fullPath = (fs::path(folderPath) / name).string();
         item.isDirectory = true;
         m_displayItems.push_back(item);
     }
     for (const auto& name : files) {
         DisplayItem item;
         item.name = name;
-        item.fullPath = folderPath + "\\" + name;
+        item.fullPath = (fs::path(folderPath) / name).string();
         item.isDirectory = false;
         m_displayItems.push_back(item);
     }
@@ -294,7 +294,14 @@ void FolderViewer::RefreshDisplay(const std::string& folderPath) {
     std::cout << "W/Up / S/Down: Navigate | Enter: Open folder" << std::endl;
     std::cout << "Right Click / Ctrl+N / Delete: Action on selected item" << std::endl;
 
-    
+    // 打印当前选中的对象名称（用于验证高亮功能）
+    if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_displayItems.size())) {
+        const auto& item = m_displayItems[m_selectedIndex];
+        std::cout << "Selected: " << item.name << (item.isDirectory ? "/" : "") << std::endl;
+    }
+    else {
+        std::cout << "Selected: None" << std::endl;
+    }
 }
 
 void FolderViewer::MoveSelection(int delta) {
@@ -369,7 +376,33 @@ void FolderViewer::OnCtrlN() {
     const auto& item = m_displayItems[m_selectedIndex];
     std::cout << "[Ctrl+N] Selected: " << item.fullPath << std::endl;
 
-    // TODO: 实现 Ctrl+N 功能（留白）
+    // 获取父目录路径
+    fs::path parentPath = fs::path(item.fullPath).parent_path();
+    if (parentPath.empty()) {
+        std::cerr << "[Ctrl+N] Cannot get parent directory." << std::endl;
+        return;
+    }
+
+    // TODO: 弹出获取名称的对话框
+    std::string newFolderName = "test";
+    if (newFolderName.empty()) {
+        std::cerr << "[Ctrl+N] Folder name cannot be empty." << std::endl;
+        return;
+    }
+
+    fs::path newFolderPath = parentPath / newFolderName;
+    std::error_code ec;
+    if (fs::create_directory(newFolderPath, ec)) {
+        std::cout << "[Ctrl+N] Created folder: " << newFolderPath.string() << std::endl;
+        // 如果当前显示的文件夹就是父目录，则刷新视图
+        if (fs::equivalent(parentPath, m_currentFolderPath, ec)) {
+            RefreshDisplay(m_currentFolderPath);
+            NotifyParentFolderChanged(m_currentFolderPath);
+        }
+    }
+    else {
+        std::cerr << "[Ctrl+N] Failed to create folder: " << ec.message() << std::endl;
+    }
 }
 
 void FolderViewer::OnDelete() {
@@ -380,7 +413,17 @@ void FolderViewer::OnDelete() {
     const auto& item = m_displayItems[m_selectedIndex];
     std::cout << "[Delete] Selected: " << item.fullPath << std::endl;
 
-    // TODO: 实现 Delete 功能（留白）
+    // TODO:弹出确认框
+
+    try {
+        std::filesystem::remove_all(item.fullPath);
+        std::cout << "[Delete] Successfully deleted: " << item.fullPath << std::endl;
+        RefreshDisplay(m_currentFolderPath);
+        NotifyParentFolderChanged(m_currentFolderPath);
+    }
+    catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "[Delete] Failed to delete: " << e.what() << std::endl;
+    }
 }
 
 void FolderViewer::OnEnter() {
