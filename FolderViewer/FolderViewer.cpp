@@ -50,6 +50,16 @@ std::wstring AnsiToWide(const std::string& ansiStr) {
     return wstr;
 }
 
+void FolderViewer::OnUpdatePath() {
+    char buffer[SHARED_MEM_SIZE];
+    memcpy(buffer, m_pSharedView, SHARED_MEM_SIZE);
+    buffer[SHARED_MEM_SIZE - 1] = '\0';
+    std::string rawPath(buffer);
+    m_currentFolderPath = rawPath;
+    if (m_currentFolderPath.empty()) return;
+    RefreshDisplay(m_currentFolderPath);
+}
+
 FolderViewer::FolderViewer()
     : m_hSharedMem(nullptr)
     , m_pSharedView(nullptr)
@@ -356,19 +366,6 @@ void FolderViewer::OnMoveDown() {
     MoveSelection(1);
 }
 
-void FolderViewer::OnUpdatePath() {
-    // 从共享内存读取新路径
-    char buffer[SHARED_MEM_SIZE];
-    memcpy(buffer, m_pSharedView, SHARED_MEM_SIZE);
-    buffer[SHARED_MEM_SIZE - 1] = '\0';
-    std::string newPath(buffer);
-
-    if (newPath.empty()) return;
-
-    m_currentFolderPath = newPath;
-    RefreshDisplay(m_currentFolderPath);
-}
-
 void FolderViewer::OnExit() {
     m_running = false;
 }
@@ -394,12 +391,12 @@ void FolderViewer::OnRightClick() {
     const auto& item = m_displayItems[m_selectedIndex];
     std::cout << "[Right Click] Selected: " << item.fullPath << std::endl;
 
-    // === 1. 定义事件名称（宽字符） ===
+    // === 1. 定义事件名称 ===
     const std::wstring eventAddEndName = L"Global\\OFGal_Engine_AddItem_AddEnd";
     const std::wstring eventCancelName = L"Global\\OFGal_Engine_AddItem_Cancel";
     const std::wstring eventExitName = L"Global\\OFGal_Engine_AddItem_Exit";
 
-    // === 2. 创建三个事件 ===
+    // === 2. 创建事件 ===
     HANDLE hEventAddEnd = CreateEventW(nullptr, FALSE, FALSE, eventAddEndName.c_str());
     HANDLE hEventCancel = CreateEventW(nullptr, FALSE, FALSE, eventCancelName.c_str());
     HANDLE hEventExit = CreateEventW(nullptr, FALSE, FALSE, eventExitName.c_str());
@@ -412,21 +409,27 @@ void FolderViewer::OnRightClick() {
         return;
     }
 
-    // === 3. 启动子进程 AddItem.exe ===
+    // === 3. 直接从共享内存读取原始 ANSI 路径并转换为宽字符 ===
+    char rawPath[SHARED_MEM_SIZE];
+    memcpy(rawPath, m_pSharedView, SHARED_MEM_SIZE);
+    rawPath[SHARED_MEM_SIZE - 1] = '\0';
+    std::string ansiPath(rawPath);
+    std::wstring currentDirW = AnsiToWide(ansiPath); // 使用本地代码页转换
+
+    // 构造命令行
+    std::wstring commandLine = L"\"" + exePath_AddItem + L"\" \"" + currentDirW + L"\"";
+
+    // === 4. 启动子进程 ===
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi = {};
 
     BOOL processCreated = CreateProcessW(
         exePath_AddItem.c_str(),
-        nullptr,                 // 命令行参数（若有需要可传递选中项信息）
-        nullptr,                 // 进程安全属性
-        nullptr,                 // 线程安全属性
-        FALSE,                   // 不继承句柄
-        CREATE_NEW_CONSOLE,      // 创建新控制台窗口
-        nullptr,                 // 环境变量
-        nullptr,                 // 当前目录
-        &si,
-        &pi
+        commandLine.data(),
+        nullptr, nullptr, FALSE,
+        CREATE_NEW_CONSOLE,
+        nullptr, nullptr,
+        &si, &pi
     );
 
     if (!processCreated) {
@@ -437,50 +440,37 @@ void FolderViewer::OnRightClick() {
         return;
     }
 
-    // 不需要子进程主线程句柄
     CloseHandle(pi.hThread);
 
-    // === 4. 等待事件或子进程退出 ===
+    // === 5. 等待事件 ===
     HANDLE waitHandles[3] = { hEventAddEnd, hEventCancel, pi.hProcess };
     DWORD waitResult = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
 
     bool shouldRefresh = false;
-
     if (waitResult == WAIT_OBJECT_0) {
-        // 收到 AddEnd 事件
         std::cout << "[Right Click] AddItem completed (AddEnd)." << std::endl;
         shouldRefresh = true;
     }
     else if (waitResult == WAIT_OBJECT_0 + 1) {
-        // 收到 Cancel 事件
         std::cout << "[Right Click] AddItem cancelled by user." << std::endl;
     }
     else if (waitResult == WAIT_OBJECT_0 + 2) {
-        // 子进程自行退出
         std::cout << "[Right Click] AddItem.exe terminated without signaling." << std::endl;
     }
     else {
         std::cerr << "[Right Click] Wait failed. Error: " << GetLastError() << std::endl;
     }
 
-    // === 5. 通知子进程退出并等待终止 ===
+    // === 6. 通知退出 ===
     SetEvent(hEventExit);
+    WaitForSingleObject(pi.hProcess, 1000);
 
-    // 给予子进程 1 秒时间自行清理
-    DWORD exitWait = WaitForSingleObject(pi.hProcess, 1000);
-    if (exitWait == WAIT_TIMEOUT) {
-        // 超时则强制终止
-        TerminateProcess(pi.hProcess, 0);
-        std::cout << "[Right Click] AddItem.exe forcefully terminated." << std::endl;
-    }
-
-    // === 6. 清理资源 ===
+    // === 7. 清理 ===
     CloseHandle(pi.hProcess);
     CloseHandle(hEventAddEnd);
     CloseHandle(hEventCancel);
     CloseHandle(hEventExit);
 
-    // === 7. 若操作成功完成，通知父进程刷新视图 ===
     if (shouldRefresh) {
         NotifyParentFolderChanged(m_currentFolderPath);
     }
@@ -723,18 +713,17 @@ int FolderViewer::Run() {
         return -1;
     }
 
-    // 读取初始路径并显示
     char buffer[SHARED_MEM_SIZE];
     memcpy(buffer, m_pSharedView, SHARED_MEM_SIZE);
     buffer[SHARED_MEM_SIZE - 1] = '\0';
-    m_currentFolderPath = buffer;
+    std::string rawPath(buffer);
+    m_currentFolderPath = rawPath;  // 添加编码转换
     if (!m_currentFolderPath.empty()) {
         RefreshDisplay(m_currentFolderPath);
     }
 
     m_running = true;
     MainLoop();
-
     CloseIPCResources();
     return 0;
 }

@@ -9,6 +9,9 @@ WindowsSystem::WindowsSystem() {
     size_t len = testpath.size() + 1;
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, testpath.c_str());
+
+    OpenProjectStructureViewer(exePath_ProjectStructureViewer);
+    RefreshProjectStructureViewer();
 }
 
 WindowsSystem::~WindowsSystem() {
@@ -300,28 +303,24 @@ void WindowsSystem::CleanupChildProcess(const std::string& processKey) {
 
 // ---------- 便捷包装：ProjectStructureViewer ----------
 
-bool WindowsSystem::OpenProjectStructureViewer(const char* ViewerExePath, const char* ProjectRoot) {
+bool WindowsSystem::OpenProjectStructureViewer(const wchar_t* ViewerExePath, const wchar_t* ProjectRoot) {
     ChildProcessConfig config;
     config.processKey = "ProjectStructureViewer";
     config.exePath = ViewerExePath;
-    if (ProjectRoot && strlen(ProjectRoot) > 0) {
-        config.commandLineArgs = std::string("\"") + ProjectRoot + "\"";
+    if (ProjectRoot && wcslen(ProjectRoot) > 0) {
+        config.commandLineArgs = std::wstring(L"\"") + ProjectRoot + L"\"";
     }
     config.createNewConsole = true;
     config.redirectStdIO = true;
 
-    // 需要创建的共享内存块
     config.sharedMemBlocks["Path"] = MAX_PATH;
-
-    // 需要创建的事件
     config.eventsToCreate["Exit"] = false;
     config.eventsToCreate["Refresh"] = false;
 
-    if (!LaunchChildProcess(config)) {
+    if (!LaunchChildProcessW(config)) {   // 使用宽字符启动函数
         return false;
     }
 
-    // 写入初始路径
     if (currentProjectDirectory) {
         WriteToSharedMemory("ProjectStructureViewer", "Path", currentProjectDirectory, strlen(currentProjectDirectory) + 1);
     }

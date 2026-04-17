@@ -6,11 +6,11 @@ InputAction InputHandler::PollKeyboard() {
     if (!_kbhit()) return InputAction::None;
 
     int ch = _getch();
-    if (ch == 0 || ch == 224) { // ¹¦ÄÜ¼üÇ°×º
+    if (ch == 0 || ch == 224) { // åŠŸèƒ½é”®å‰ç¼€
         ch = _getch();
         switch (ch) {
-        case 72: return InputAction::MoveUp;    // ÉÏ¼ıÍ·
-        case 80: return InputAction::MoveDown;  // ÏÂ¼ıÍ·
+        case 72: return InputAction::MoveUp;    // ä¸Šç®­å¤´
+        case 80: return InputAction::MoveDown;  // ä¸‹ç®­å¤´
         default: return InputAction::None;
         }
     }
@@ -31,20 +31,20 @@ bool InputHandler::CheckMouseLeftClick(int& outRow) {
     if (!GetNumberOfConsoleInputEvents(hConsole, &numEvents) || numEvents == 0)
         return false;
 
-    // Ö»¶ÁÈ¡µÚÒ»¸öÊÂ¼ş£¬±ÜÃâ»ıÑ¹
+    // åªè¯»å–ç¬¬ä¸€ä¸ªäº‹ä»¶ï¼Œé¿å…ç§¯å‹
     INPUT_RECORD ir;
     DWORD read;
     if (PeekConsoleInput(hConsole, &ir, 1, &read) && read > 0) {
         if (ir.EventType == MOUSE_EVENT) {
             const MOUSE_EVENT_RECORD& mouse = ir.Event.MouseEvent;
             if (mouse.dwButtonState == FROM_LEFT_1ST_BUTTON_PRESSED) {
-                // ¶ÁÈ¡¸ÃÊÂ¼şÒÔ´Ó¶ÓÁĞÖĞÒÆ³ı
+                // è¯»å–è¯¥äº‹ä»¶ä»¥ä»é˜Ÿåˆ—ä¸­ç§»é™¤
                 ReadConsoleInput(hConsole, &ir, 1, &read);
                 outRow = mouse.dwMousePosition.Y;
                 return true;
             }
             else if (mouse.dwEventFlags == 0) {
-                // Èç¹ûÊÇ°´Å¥ÊÍ·ÅµÈÆäËûÊó±êÊÂ¼ş£¬Ö±½Ó¶ÁÈ¡¶ªÆú£¬·ÀÖ¹¶Ñ»ı
+                // å¦‚æœæ˜¯æŒ‰é’®é‡Šæ”¾ç­‰å…¶ä»–é¼ æ ‡äº‹ä»¶ï¼Œç›´æ¥è¯»å–ä¸¢å¼ƒï¼Œé˜²æ­¢å †ç§¯
                 ReadConsoleInput(hConsole, &ir, 1, &read);
             }
         }
