@@ -66,7 +66,7 @@ void printWelcomeMessage(int version, const std::vector<std::string>& members) {
 std::string GetProjectPath() {
     printWelcomeMessage(10001, members);
 	std::string ProjectPath = "";
-	std::cout << "Please enter the project path:" << std::endl;
+	std::cout << "Please enter the project path: (Input of the following paths is prohibited: C:\\Users\\UserName...)" << std::endl;
 	std::cin >> ProjectPath;
 	system("cls");
 	return ProjectPath;
@@ -85,12 +85,7 @@ int main() {
 	InputCollector collector(&inputSystem);
 	std::thread inputThread(InputThread, &collector);
 
-	//_EventBus::getInstance().publish_SoundPlay("E:/Projects/C++Projects/OFGal_Engine/acane_madder___Think_of_You.wav");
-
-	pWindowsSystem->OpenProjectStructureViewer("E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\ProjectStructureViewer.exe");
-	pWindowsSystem->RefreshProjectStructureViewer();
 	system("pause");
-	pWindowsSystem->CloseProjectStructureViewer();
 	running = false;
 	inputThread.join();  // 等待子线程结束
 	return 0;
