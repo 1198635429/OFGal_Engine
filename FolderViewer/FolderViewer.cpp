@@ -492,7 +492,10 @@ void FolderViewer::OnCtrlN() {
     }
 
     // TODO: 弹出获取名称的对话框
-    std::string newFolderName = "test";
+    std::string newFolderName = "";
+    std::cout << "============================" << std::endl;
+    std::cout << "Please enter the name of the new folder:" << std::endl;
+    std::cin >> newFolderName;
     if (newFolderName.empty()) {
         std::cerr << "[Ctrl+N] Folder name cannot be empty." << std::endl;
         return;

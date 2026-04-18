@@ -2,6 +2,7 @@
 #include "WindowsSystem.h"
 #include <sstream>
 #include <cstring>
+#include <vector>
 
 WindowsSystem::WindowsSystem() {
     // 初始化项目目录（测试用）
@@ -10,14 +11,20 @@ WindowsSystem::WindowsSystem() {
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, testpath.c_str());
 
-    OpenProjectStructureViewer(exePath_ProjectStructureViewer);
+    OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
 }
 
 WindowsSystem::~WindowsSystem() {
-    // 关闭所有子进程
-    for (auto& pair : childProcesses) {
-        TerminateChildProcess(pair.first, 1000);
+    // 先拷贝所有子进程的键，避免迭代器失效
+    std::vector<std::string> keys;
+    keys.reserve(childProcesses.size());
+    for (const auto& pair : childProcesses) {
+        keys.push_back(pair.first);
+    }
+    // 安全地逐个终止
+    for (const auto& key : keys) {
+        TerminateChildProcess(key, 1000);
     }
     delete[] currentProjectDirectory;
 }
@@ -93,7 +100,7 @@ bool WindowsSystem::CreateProcessEvent(const std::string& processKey, const std:
     return true;
 }
 
-bool WindowsSystem::LaunchChildProcess(const ChildProcessConfig& config) {
+bool WindowsSystem::LaunchChildProcessW(const ChildProcessConfig& config) {
     const std::string& key = config.processKey;
     if (childProcesses.find(key) != childProcesses.end()) {
         TerminateChildProcess(key, 1000);
@@ -124,36 +131,38 @@ bool WindowsSystem::LaunchChildProcess(const ChildProcessConfig& config) {
         }
     }
 
-    // 3. 构建完整命令行
-    std::string fullCmdLine = "\"" + config.exePath + "\"";
+    // 3. 构建完整命令行（宽字符串）
+    std::wstring fullCmdLine = L"\"" + config.exePath + L"\"";
     if (!config.commandLineArgs.empty()) {
-        fullCmdLine += " " + config.commandLineArgs;
+        fullCmdLine += L" " + config.commandLineArgs;
     }
 
-    // 4. 设置启动信息
-    STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+    // 为 CreateProcessW 准备可修改的缓冲区
+    std::vector<wchar_t> cmdBuffer(fullCmdLine.begin(), fullCmdLine.end());
+    cmdBuffer.push_back(L'\0');
+
+    // 4. 设置启动信息（宽字符版本）
+    STARTUPINFOW si = { sizeof(STARTUPINFOW) };
     PROCESS_INFORMATION pi = { 0 };
 
     DWORD creationFlags = 0;
     if (config.createNewConsole) {
         creationFlags |= CREATE_NEW_CONSOLE;
     }
-    if (config.redirectStdIO && config.createNewConsole) {
-        // 无需特殊操作，新控制台自动接管
-    }
+    // redirectStdIO 与 CREATE_NEW_CONSOLE 组合时无需额外标志，新控制台自动接管
 
-    BOOL success = CreateProcessA(
-        NULL,
-        const_cast<LPSTR>(fullCmdLine.c_str()),
-        NULL, NULL,
-        FALSE,
+    BOOL success = CreateProcessW(
+        nullptr,                     // lpApplicationName
+        cmdBuffer.data(),            // lpCommandLine（可修改的宽字符缓冲区）
+        nullptr, nullptr, FALSE,
         creationFlags,
-        NULL, NULL,
+        nullptr, nullptr,
         &si, &pi
     );
 
     if (!success) {
-        OutputDebugStringA(("CreateProcess failed: " + fullCmdLine + " error: " + std::to_string(GetLastError())).c_str());
+        // 输出错误信息（宽字符转 ANSI 仅用于调试）
+        OutputDebugStringA(("CreateProcessW failed, error: " + std::to_string(GetLastError())).c_str());
         CleanupChildProcess(key);
         return false;
     }
@@ -162,8 +171,8 @@ bool WindowsSystem::LaunchChildProcess(const ChildProcessConfig& config) {
     storedInfo.hThread = pi.hThread;
     storedInfo.processId = pi.dwProcessId;
 
-    // 关闭线程句柄（可选，我们保留以便 WaitForSingleObject）
-    // 不关闭，保存在 storedInfo 中
+    // 关闭线程句柄（保留以便后续 WaitForSingleObject）
+    // 不在此处关闭，保存在 storedInfo 中
 
     return true;
 }
@@ -181,7 +190,6 @@ bool WindowsSystem::WriteToSharedMemory(const std::string& processKey, const std
 
     size_t copySize = (dataSize < block.size) ? dataSize : block.size;
     memcpy(block.pView, data, copySize);
-    // 若写入字符串且未占满，可选择添加终止符，但二进制数据不应自动添加。
     return true;
 }
 
@@ -317,7 +325,7 @@ bool WindowsSystem::OpenProjectStructureViewer(const wchar_t* ViewerExePath, con
     config.eventsToCreate["Exit"] = false;
     config.eventsToCreate["Refresh"] = false;
 
-    if (!LaunchChildProcessW(config)) {   // 使用宽字符启动函数
+    if (!LaunchChildProcessW(config)) {
         return false;
     }
 

@@ -19,7 +19,7 @@ public:
 
     // ---------- 通用子进程管理接口 ----------
     // 启动一个子进程（根据配置）
-    bool LaunchChildProcess(const ChildProcessConfig& config);
+    bool LaunchChildProcessW(const ChildProcessConfig& config);
 
     // 向指定子进程的指定共享内存块写入数据（二进制安全）
     bool WriteToSharedMemory(const std::string& processKey, const std::string& blockName, const void* data, size_t dataSize);
@@ -46,7 +46,7 @@ public:
     DWORD GetSharedMemorySize(const std::string& processKey, const std::string& blockName);
 
     // ---------- 便捷包装 ----------
-    bool OpenProjectStructureViewer(const wchar_t* ViewerExePath, const wchar_t* ProjectRoot);
+    bool OpenProjectStructureViewer(const wchar_t* ViewerExePath, const wchar_t* ProjectRoot = nullptr);
     bool RefreshProjectStructureViewer();
     bool CloseProjectStructureViewer();
 
@@ -63,12 +63,12 @@ private:
     // 清理指定子进程的所有资源
     void CleanupChildProcess(const std::string& processKey);
 
-    // 构建全局唯一名称
+    // 构建全局唯一名称（保持 ANSI 用于内核对象命名）
     std::string MakeGlobalName(const std::string& processKey, const std::string& suffix);
 
 private:
-    std::vector<LevelData> levels;                                      // 原有数据
-    char* currentProjectDirectory = nullptr;                            // 当前项目路径
+    std::vector<LevelData> levels;
+    char* currentProjectDirectory = nullptr;                            // 当前项目路径（ANSI）
     std::wstring exePath_ProjectStructureViewer = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\ProjectStructureViewer.exe";
 
     std::unordered_map<std::string, ChildProcessInfo> childProcesses;   // 进程键 -> 信息
