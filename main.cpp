@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include "_EventBus.h"
 #include "BMP_Reader.h"
 #include "cmdDrawer.h"
@@ -88,5 +88,9 @@ int main() {
 	system("pause");
 	running = false;
 	inputThread.join();  // 等待子线程结束
+
+	OutputDebugStringA("=== main END ===\n");
+	//std::this_thread::sleep_for(std::chrono::seconds(5));
+
 	return 0;
 }

@@ -20,7 +20,6 @@ public:
     音频系统事件
     ==========================================
     */
-    using SoundPlay_Handler = std::function < bool(const char*) >;		//bool表示是否成功，char*则指向音频文件路径，视实际情况更改
     //其它事件类型，请自行添加
 
     // ===== 音频委托类型 =====
@@ -45,12 +44,11 @@ public:
     void publish_PlaySound(const PlaySoundEvent& playEvent);
     void publish_PauseSound(const PauseSoundEvent& playEvent);
     void publish_StopSound(const StopSoundEvent& playEvent);
-    void publish_StopAllSound(const StopAllSoundEvent& playEvent);
+    void publish_StopAllSound(const StopAllSoundEvent& playEvent);      
     void publish_SetVolume(const SetVolumeEvent& playEvent);
     void publish_SetSoundVolume(const SetSoundVolumeEvent& playEvent);
     void publish_SetSpeed(const SetSpeedEvent& playEvent);
 
-    using SoundPlay_Handler = std::function < bool(const char*) >;
     /*
     ==========================================
     文件系统事件
@@ -93,9 +91,6 @@ public:
     using applyColorGrading_Handler = std::function<void(Frame&, int, float, float3)>;
 
 
-    void subscribe_SoundPlay(SoundPlay_Handler handler);
-    void publish_SoundPlay(const char* sound_path);
-
     void subscribe_ReadLevelData(ReadLevelData_Handler handler);
     void subscribe_WriteLevelData(WriteLevelData_Handler handler);
     void subscribe_GetProjectStructure(GetProjectStructure_Handler handler);
@@ -111,8 +106,6 @@ public:
     BlueprintData publish_ReadBPData(const std::string& filepath);
     void publish_WriteBPData(const std::string& filepath, const BlueprintData& data);
 
-	void subscribe_InputEvent(InputEvent_Handler handler);
-	void publish_InputEvent(const InputEvent& event);
 	
     void subscribe_RenderAndPrint(RenderAndPrint_Handler handler);
     void publish_RenderAndPrint(const LevelData& currentLevel, TextureSamplingMethod samplingMethod, int MSAA_Multiple);
@@ -170,7 +163,7 @@ private:
     _EventBus() = default;
     ~_EventBus() = default;
     
-    // ===== 委托容器 =====
+    // ===== 委托容器 ====
     std::vector<PlaySound_Handler> Handlers_play;
     std::vector<PauseSound_Handler> Handlers_pause;
     std::vector<StopSound_Handler> Handlers_stop;
@@ -179,6 +172,7 @@ private:
     std::vector<SetSoundVolume_Handler> Handlers_soundVolume;
     std::vector<SetSpeed_Handler> Handlers_speed;
    
+    // 所有播放音频事件订阅者，按理来说只有 音频系统 会订阅
 
     std::vector<ReadLevelData_Handler> handlers_ReadLevelData;
     std::vector<WriteLevelData_Handler> handlers_WriteLevelData;
@@ -188,7 +182,7 @@ private:
     std::vector<WriteBPData_Handler> handlers_WriteBPData;
     std::vector<ReadBPData_Handler> handlers_ReadBPData;
 
-	std::vector<SoundPlay_Handler> handlers_SoundPlay;  // 所有播放音频事件订阅者，按理来说只有 音频系统 会订阅
+	
 
 	std::vector<InputEvent_Handler> handlers_InputEvent;  //输入事件订阅者存放的容器
 

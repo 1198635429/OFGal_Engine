@@ -1,35 +1,24 @@
 ﻿#include "_EventBus.h"
 #include <iostream>
-
+#include<Windows.h>  
 /*
 ==========================================
 音频系统事件订阅与发布
 ==========================================
 */
-void _EventBus::publish_SoundPlay(const char* sound_path)
-{
-    for (auto& handler : handlers_SoundPlay)
-    {
-        handler(sound_path);
-    }
-}
-void _EventBus::subscribe_SoundPlay(SoundPlay_Handler handler)
-{
-    handlers_SoundPlay.push_back(handler);}
-void _EventBus::publish_InputEvent(const InputEvent& event) {
-    for (auto& handler : handlers_InputEvent) {
-        handler(event);
-    }
-}
-void _EventBus::subscribe_InputEvent(InputEvent_Handler handler) {
-    handlers_InputEvent.push_back(handler);
-}
 // 播放音频事件
 void _EventBus::subscribe_PlaySound(PlaySound_Handler handler) {
+    OutputDebugStringA("=== subscribe_PlaySound called ===\n");
     Handlers_play.push_back(handler);
+    OutputDebugStringA(("Handlers_play size now = " + std::to_string(Handlers_play.size()) + "\n").c_str());
 }
 void _EventBus::publish_PlaySound(const PlaySoundEvent& playEvent) {
-    for (auto& h : Handlers_play) h(playEvent);
+    OutputDebugStringA("=== publish_PlaySound called ===\n");
+    OutputDebugStringA(("Handler count = " + std::to_string(Handlers_play.size()) + "\n").c_str());
+    for (auto& h : Handlers_play) {
+        OutputDebugStringA("  invoking handler\n");
+        h(playEvent);
+    }
 }
 
 // 暂停音频事件
