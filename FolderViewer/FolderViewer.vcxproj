@@ -138,9 +138,6 @@
     <ClInclude Include="KeyCode.h" />
     <ClInclude Include="SharedTypes.h" />
   </ItemGroup>
-  <ItemGroup>
-    <Text Include="draw.txt" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

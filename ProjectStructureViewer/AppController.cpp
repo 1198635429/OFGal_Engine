@@ -71,20 +71,34 @@ void AppController::OnFolderChanged() {
 
     DEBUG_LOG("AppController: Received changed path: " << changedPath << "\n");
 
-    // 2. 在树视图中查找并选中该路径
+    // 2. 重新加载项目结构（因为文件夹内容已变化）
+    std::string rootDir = m_project->RootDirectory;  // 保存根目录
+    m_project.reset(new ProjectStructure(GetProjectStructure(rootDir.c_str())));
+    m_view.SetProject(m_project.get());
+
+    // 3. 在刷新后的树中查找变更路径对应的行，并设置高亮
     int line = m_view.FindLineByPath(changedPath);
     if (line >= 0) {
-        m_view.JumpToLine(line);
-        DEBUG_LOG("AppController: Selected line " << line << " for path: " << changedPath << "\n");
+        m_view.SetHighlightLine(line);
+        DEBUG_LOG("AppController: Found changed path at line " << line << "\n");
     }
     else {
-        DEBUG_LOG("AppController: Path not found in current tree view: " << changedPath << "\n");
-        // 即使没找到，仍然尝试通知子进程（可能路径在根外，让子进程自行处理）
+        // 如果找不到（例如路径已被删除），保持原高亮行不变（或重置为根）
+        int oldLine = m_view.GetHighlightLine();
+        if (oldLine >= m_view.GetTotalLines()) {
+            m_view.SetHighlightLine(0);
+        }
+        DEBUG_LOG("AppController: Changed path not found in refreshed tree. Keeping previous highlight.\n");
     }
 
-    // 3. 通知子进程更新当前显示的路径（确保同步）
+    // 4. 渲染更新后的树视图
+    m_view.Render(m_view.GetHighlightLine());
+
+    // 5. 获取当前选中的路径，通知 FolderViewer 更新显示
+    std::string selectedPath = m_view.GetSelectedInfo().absolutePath;
     if (m_folderViewerStarted) {
-        m_folderViewerMgr->NotifyPathChange(changedPath);
+        m_folderViewerMgr->NotifyPathChange(selectedPath);
+        DEBUG_LOG("AppController: Notified FolderViewer with selected path: " << selectedPath << "\n");
     }
 }
 

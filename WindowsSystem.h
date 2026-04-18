@@ -12,8 +12,8 @@ class WindowsSystem {
 public:
     WindowsSystem(const WindowsSystem&) = delete;
     WindowsSystem& operator=(const WindowsSystem&) = delete;
-    static WindowsSystem& getInstance() {
-        static WindowsSystem instance;
+    static WindowsSystem& getInstance(const std::string& path = "") {
+        static WindowsSystem instance(path);
         return instance;
     }
 
@@ -52,6 +52,7 @@ public:
 
 private:
     WindowsSystem();
+    WindowsSystem(std::string temppath);
     ~WindowsSystem();
 
     // 内部辅助：创建指定子进程的共享内存块
