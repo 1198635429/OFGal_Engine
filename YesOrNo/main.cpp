@@ -22,7 +22,7 @@ void Write(const std::wstring& text) {
 }
 
 int main() {
-    SetConsoleTitleW(L"Yes_or_No");
+    SetConsoleTitleW(L"OFGal_Engine/Yes_or_No");
 
     HANDLE hSharedMem = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, SHARED_MEM_NAME);
     if (!hSharedMem) {

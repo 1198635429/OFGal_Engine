@@ -66,6 +66,18 @@ private:
     HANDLE m_hEventFolderChanged;
     HANDLE m_hEventExit;
 
+    HANDLE m_hSharedMem_OpenLevel;
+    WCHAR* m_pSharedView_OpenLevel;
+    HANDLE m_hEvent_OpenLevel;
+
+    HANDLE m_hSharedMem_OpenBlueprint;
+    WCHAR* m_pSharedView_OpenBlueprint;
+    HANDLE m_hEvent_OpenBlueprint;
+
+    HANDLE m_hSharedMem_OpenText;
+    WCHAR* m_pSharedView_OpenText;
+    HANDLE m_hEvent_OpenText;
+
     // 当前显示的目录路径
     std::string m_currentFolderPath;
 
@@ -85,6 +97,7 @@ private:
 
     // 常量
     static constexpr DWORD SHARED_MEM_SIZE = 512;
+    static constexpr DWORD SHARED_MEM_SIZE_LARGE = 4096;
     static constexpr const char* PROCESS_KEY = "FolderViewer";
 
     std::wstring exePath_YesOrNo = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\YesOrNo.exe";

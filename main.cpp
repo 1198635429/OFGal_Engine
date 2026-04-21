@@ -12,13 +12,6 @@
 #include "GameVM.h"
 #include "RenderingSystem.h"
 #include "WindowsSystem.h"
-std::atomic<bool> running(true);    //创建原子变量，表示程序是否在运行
-void InputThread(InputCollector* collector) {
-	while (running) {
-		collector->update();
-	}
-	Sleep(20);
-}
 const std::vector<std::string>& members = { "yerundong7", "epc-sg","Nagato-Yuki-708" };
 void printWelcomeMessage(int version, const std::vector<std::string>& members) {
     system("cls");
@@ -71,6 +64,13 @@ std::string GetProjectPath() {
 	system("cls");
 	return ProjectPath;
 }
+std::atomic<bool> running(true);    //创建原子变量，表示程序是否在运行
+void InputThread(InputCollector* collector) {
+    while (running) {
+        collector->update();
+    }
+    Sleep(20);
+}
 int main() {
 	std::string ProjectPath = GetProjectPath();
 
@@ -84,6 +84,8 @@ int main() {
 	InputSystem inputSystem;
 	InputCollector collector(&inputSystem);
 	std::thread inputThread(InputThread, &collector);
+
+    pWindowsSystem->Run();      //死循环
 
 	system("pause");
 	running = false;

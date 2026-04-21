@@ -50,6 +50,10 @@ public:
     bool RefreshProjectStructureViewer();
     bool CloseProjectStructureViewer();
 
+    bool OpenLevelTreeList();
+
+    void Run();
+
 private:
     WindowsSystem();
     WindowsSystem(std::string temppath);
@@ -68,9 +72,14 @@ private:
     std::string MakeGlobalName(const std::string& processKey, const std::string& suffix);
 
 private:
-    std::vector<LevelData> levels;
+    LevelData* currentLevel = nullptr;
     char* currentProjectDirectory = nullptr;                            // 当前项目路径（ANSI）
     std::wstring exePath_ProjectStructureViewer = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\ProjectStructureViewer.exe";
+    std::wstring exePath_LevelTreeList = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\LevelTreeList.exe";
 
     std::unordered_map<std::string, ChildProcessInfo> childProcesses;   // 进程键 -> 信息
+    std::wstring m_lastOpenedLevelPath;
+    std::wstring m_lastOpenedBlueprintPath;
+    std::wstring m_lastOpenedTextPath;
+
 };

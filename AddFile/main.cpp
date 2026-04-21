@@ -151,7 +151,7 @@ bool CreateEmptyTextFile(const std::wstring& filepath) {
 // ------------------------------------------------------------
 int wmain(int argc, wchar_t* argv[]) {
     try {
-        SetConsoleTitleW(L"Add_Item");
+        SetConsoleTitleW(L"OFGal_Engine/Add_Item");
 
         // 启用控制台 Unicode 输出（用于显示中文）
         _setmode(_fileno(stdout), _O_U16TEXT);

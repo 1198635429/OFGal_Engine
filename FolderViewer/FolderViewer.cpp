@@ -66,6 +66,9 @@ FolderViewer::FolderViewer()
     , m_hEventUpdatePath(nullptr)
     , m_hEventFolderChanged(nullptr)
     , m_hEventExit(nullptr)
+    , m_hSharedMem_OpenLevel(nullptr), m_pSharedView_OpenLevel(nullptr), m_hEvent_OpenLevel(nullptr)
+    , m_hSharedMem_OpenBlueprint(nullptr), m_pSharedView_OpenBlueprint(nullptr), m_hEvent_OpenBlueprint(nullptr)
+    , m_hSharedMem_OpenText(nullptr), m_pSharedView_OpenText(nullptr), m_hEvent_OpenText(nullptr)
     , m_running(false)
     , m_selectedIndex(-1)
 {
@@ -207,6 +210,32 @@ bool FolderViewer::OpenIPCResources() {
         return false;
     }
 
+    auto OpenBlockAndEvent = [this](const std::string& name, HANDLE& hMem, WCHAR*& pView, HANDLE& hEvent) -> bool {
+        std::string memName = MakeGlobalName(name + "Path");
+        hMem = OpenFileMappingW(FILE_MAP_WRITE, FALSE, Utf8ToWide(memName).c_str());
+        if (!hMem) return false;
+        pView = static_cast<WCHAR*>(MapViewOfFile(hMem, FILE_MAP_WRITE, 0, 0, SHARED_MEM_SIZE_LARGE));
+        if (!pView) return false;
+
+        std::string evName = MakeGlobalName(name);
+        hEvent = OpenEventA(EVENT_MODIFY_STATE, FALSE, evName.c_str());
+        if (!hEvent) return false;
+        return true;
+        };
+
+    if (!OpenBlockAndEvent("OpenLevel", m_hSharedMem_OpenLevel, m_pSharedView_OpenLevel, m_hEvent_OpenLevel)) {
+        std::cerr << "Failed to open OpenLevel resources" << std::endl;
+        return false;
+    }
+    if (!OpenBlockAndEvent("OpenBlueprint", m_hSharedMem_OpenBlueprint, m_pSharedView_OpenBlueprint, m_hEvent_OpenBlueprint)) {
+        std::cerr << "Failed to open OpenBlueprint resources" << std::endl;
+        return false;
+    }
+    if (!OpenBlockAndEvent("OpenText", m_hSharedMem_OpenText, m_pSharedView_OpenText, m_hEvent_OpenText)) {
+        std::cerr << "Failed to open OpenText resources" << std::endl;
+        return false;
+    }
+
     return true;
 }
 
@@ -231,6 +260,16 @@ void FolderViewer::CloseIPCResources() {
         CloseHandle(m_hEventExit);
         m_hEventExit = nullptr;
     }
+
+    auto CloseBlockAndEvent = [](HANDLE& hMem, WCHAR*& pView, HANDLE& hEvent) {
+        if (pView) { UnmapViewOfFile(pView); pView = nullptr; }
+        if (hMem) { CloseHandle(hMem); hMem = nullptr; }
+        if (hEvent) { CloseHandle(hEvent); hEvent = nullptr; }
+        };
+
+    CloseBlockAndEvent(m_hSharedMem_OpenLevel, m_pSharedView_OpenLevel, m_hEvent_OpenLevel);
+    CloseBlockAndEvent(m_hSharedMem_OpenBlueprint, m_pSharedView_OpenBlueprint, m_hEvent_OpenBlueprint);
+    CloseBlockAndEvent(m_hSharedMem_OpenText, m_pSharedView_OpenText, m_hEvent_OpenText);
 }
 
 void FolderViewer::ClearScreen() {
@@ -668,8 +707,30 @@ void FolderViewer::OnEnter() {
         std::cout << "[Enter] Entered folder: " << item.fullPath << std::endl;
     }
     else {
-        std::cout << "[Enter] Selected file (cannot enter): " << item.fullPath << std::endl;
-        // 可扩展：对文件执行默认操作
+        fs::path filePath(item.fullPath);
+        std::string ext = filePath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        auto NotifyOpen = [&](WCHAR* pView, HANDLE hEvent, const std::string& typeName) {
+            std::wstring widePath = AnsiToWide(item.fullPath);
+            // 安全拷贝，留出结尾空字符
+            wcsncpy_s(pView, SHARED_MEM_SIZE_LARGE / sizeof(WCHAR), widePath.c_str(), _TRUNCATE);
+            SetEvent(hEvent);
+            std::cout << "[Enter] Notified parent to open " << typeName << ": " << item.fullPath << std::endl;
+            };
+
+        if (ext == ".level") {
+            NotifyOpen(m_pSharedView_OpenLevel, m_hEvent_OpenLevel, "Level");
+        }
+        else if (ext == ".bp") {
+            NotifyOpen(m_pSharedView_OpenBlueprint, m_hEvent_OpenBlueprint, "Blueprint");
+        }
+        else if (ext == ".txt" || ext == ".md") {
+            NotifyOpen(m_pSharedView_OpenText, m_hEvent_OpenText, "Text");
+        }
+        else {
+            std::cout << "[Enter] Unsupported file type: " << item.fullPath << std::endl;
+        }
     }
 }
 

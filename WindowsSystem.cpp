@@ -5,19 +5,20 @@
 #include <vector>
 
 WindowsSystem::WindowsSystem() {
-    /*
     OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
-    */
+    
+    OpenLevelTreeList();
 }
 WindowsSystem::WindowsSystem(std::string path) {
     size_t len = path.size() + 1;
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, path.c_str());
-    /*
+
     OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
-    */
+
+    OpenLevelTreeList();
 }
 
 WindowsSystem::~WindowsSystem() {
@@ -314,8 +315,6 @@ void WindowsSystem::CleanupChildProcess(const std::string& processKey) {
     childProcesses.erase(it);
 }
 
-// ---------- 便捷包装：ProjectStructureViewer ----------
-
 bool WindowsSystem::OpenProjectStructureViewer(const wchar_t* ViewerExePath, const wchar_t* ProjectRoot) {
     ChildProcessConfig config;
     config.processKey = "ProjectStructureViewer";
@@ -326,6 +325,7 @@ bool WindowsSystem::OpenProjectStructureViewer(const wchar_t* ViewerExePath, con
     config.createNewConsole = true;
     config.redirectStdIO = true;
 
+    // 原有：ProjectStructureViewer 自身使用的共享内存和事件
     config.sharedMemBlocks["Path"] = MAX_PATH;
     config.eventsToCreate["Exit"] = false;
     config.eventsToCreate["Refresh"] = false;
@@ -337,7 +337,135 @@ bool WindowsSystem::OpenProjectStructureViewer(const wchar_t* ViewerExePath, con
     if (currentProjectDirectory) {
         WriteToSharedMemory("ProjectStructureViewer", "Path", currentProjectDirectory, strlen(currentProjectDirectory) + 1);
     }
+
+    // === 新增：为 FolderViewer 创建 IPC 对象 ===
+    const std::string key = "ProjectStructureViewer";
+    auto it = childProcesses.find(key);
+    if (it == childProcesses.end()) return false;
+    ChildProcessInfo& info = it->second;
+
+    // 定义三个通道的名称后缀
+    const std::vector<std::pair<std::string, std::string>> channels = {
+        {"OpenLevel", "OpenLevelPath"},
+        {"OpenBlueprint", "OpenBlueprintPath"},
+        {"OpenText", "OpenTextPath"}
+    };
+
+    for (const auto& ch : channels) {
+        const std::string& eventSuffix = ch.first;
+        const std::string& memSuffix = ch.second;
+
+        // 构造 FolderViewer 期望的全局名称
+        std::string globalEventName = "Global\\OFGal_Engine_ProjectStructureViewer_FolderViewer_" + eventSuffix;
+        std::string globalMemName = "Global\\OFGal_Engine_ProjectStructureViewer_FolderViewer_" + memSuffix;
+
+        // 创建事件（手动重置？此处使用自动重置事件，与 FolderViewer 中一致）
+        HANDLE hEvent = CreateEventA(NULL, FALSE, FALSE, globalEventName.c_str());
+        if (!hEvent) {
+            OutputDebugStringA(("CreateEvent failed for FolderViewer: " + globalEventName).c_str());
+            return false;
+        }
+        info.events[eventSuffix] = hEvent; // 存入 events 映射，以便 Run() 中访问
+
+        // 创建共享内存（大小 4096 字节，足够存放路径）
+        const DWORD memSize = 4096;
+        HANDLE hMap = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, memSize, globalMemName.c_str());
+        if (!hMap) {
+            OutputDebugStringA(("CreateFileMapping failed for FolderViewer: " + globalMemName).c_str());
+            CloseHandle(hEvent);
+            return false;
+        }
+
+        char* pView = static_cast<char*>(MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, memSize));
+        if (!pView) {
+            OutputDebugStringA("MapViewOfFile failed for FolderViewer");
+            CloseHandle(hMap);
+            CloseHandle(hEvent);
+            return false;
+        }
+        memset(pView, 0, memSize);
+
+        SharedMemBlock block;
+        block.hSharedMem = hMap;
+        block.pView = pView;
+        block.size = memSize;
+        block.isReadOnly = false;
+        info.sharedMems[memSuffix] = block;
+    }
+
     return true;
+}
+bool WindowsSystem::OpenLevelTreeList() {
+    ChildProcessConfig config;
+    config.processKey = "LevelTreeList";
+    config.exePath = exePath_LevelTreeList;
+    // 如果需要传递命令行参数，可以设置 config.commandLineArgs
+    config.createNewConsole = true;      // 必须分配新的控制台窗口
+    config.redirectStdIO = true;         // 与 ProjectStructureViewer 保持一致
+
+    // 可选：添加一个 Exit 事件，便于后续优雅关闭
+    config.eventsToCreate["Exit"] = false;
+
+    // 如果子进程需要共享内存，可以在此添加 config.sharedMemBlocks
+
+    if (!LaunchChildProcessW(config)) {
+        OutputDebugStringA("[WindowsSystem] Failed to launch LevelTreeList.exe\n");
+        return false;
+    }
+
+    OutputDebugStringA("[WindowsSystem] LevelTreeList.exe launched successfully\n");
+    return true;
+}
+
+void WindowsSystem::Run() {
+    const std::string key = "ProjectStructureViewer";
+    auto it = childProcesses.find(key);
+    if (it == childProcesses.end()) return;
+
+    ChildProcessInfo& info = it->second;
+
+    // 获取三个事件句柄（FolderViewer 专用）
+    HANDLE hOpenLevel = info.events["OpenLevel"];
+    HANDLE hOpenBlueprint = info.events["OpenBlueprint"];
+    HANDLE hOpenText = info.events["OpenText"];
+    HANDLE hExit = info.events["Exit"]; // 原有 Exit 事件
+
+    HANDLE events[4] = { hOpenLevel, hOpenBlueprint, hOpenText, hExit };
+    const DWORD numEvents = 4;
+
+    while (true) {
+        DWORD result = WaitForMultipleObjects(numEvents, events, FALSE, INFINITE);
+        if (result == WAIT_OBJECT_0 + 3) // Exit 事件
+            break;
+
+        std::wstring* targetPath = nullptr;
+        std::string blockName;
+
+        if (result == WAIT_OBJECT_0) {
+            targetPath = &m_lastOpenedLevelPath;
+            blockName = "OpenLevelPath";
+        }
+        else if (result == WAIT_OBJECT_0 + 1) {
+            targetPath = &m_lastOpenedBlueprintPath;
+            blockName = "OpenBlueprintPath";
+        }
+        else if (result == WAIT_OBJECT_0 + 2) {
+            targetPath = &m_lastOpenedTextPath;
+            blockName = "OpenTextPath";
+        }
+        else {
+            continue;
+        }
+
+        auto blockIt = info.sharedMems.find(blockName);
+        if (blockIt != info.sharedMems.end() && blockIt->second.pView) {
+            // 共享内存中存储的是 WCHAR 字符串
+            const WCHAR* pWide = reinterpret_cast<const WCHAR*>(blockIt->second.pView);
+            *targetPath = std::wstring(pWide);
+            // 可选：输出调试信息或调用回调
+            OutputDebugStringW((std::wstring(L"[OFGal_Engine] Opened file: ") + *targetPath + L"\n").c_str());
+        }
+    }
 }
 
 bool WindowsSystem::RefreshProjectStructureViewer() {

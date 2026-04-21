@@ -48,7 +48,13 @@ void ConsoleManager::SetupWindow() {
                 scaleY = (float)height / 1600.0f;
             }
         }
-        SetWindowPos(hwndConsole, nullptr, 0, 1010.0f*scaleY, 350.0f*scaleX, 470.0f*scaleY, SWP_NOZORDER | SWP_NOACTIVATE);
+        // 先设置缓冲区，避免后续 SetWindowPos 后被覆盖
+        if (m_hConsoleOut != INVALID_HANDLE_VALUE) {
+            COORD bufferSize = { 120, 1000 };
+            SetConsoleScreenBufferSize(m_hConsoleOut, bufferSize);
+        }
+        // 再设置窗口位置与尺寸
+        SetWindowPos(hwndConsole, nullptr, 0, 1010.0f * scaleY, 350.0f * scaleX, 470.0f * scaleY, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     if (m_hConsoleOut == INVALID_HANDLE_VALUE) return;
@@ -60,12 +66,8 @@ void ConsoleManager::SetupWindow() {
         dwMode &= ~ENABLE_INSERT_MODE;
         dwMode |= ENABLE_MOUSE_INPUT;
         SetConsoleMode(m_hConsoleOut, dwMode);
-        m_vtSupported = true; // 重新检测
+        m_vtSupported = true;
     }
-
-    // 设置合理的初始缓冲区大小
-    COORD bufferSize = { 120, 1000 };
-    SetConsoleScreenBufferSize(m_hConsoleOut, bufferSize);
 }
 
 void ConsoleManager::ClearScreen() {
