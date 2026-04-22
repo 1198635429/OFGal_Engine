@@ -3,8 +3,6 @@
 #include "Json_LevelData_ReadWrite.h"
 #include <iostream>
 #include <string>
-#include <codecvt>
-#include <locale>
 
 // 全局输入系统实例（定义在 InputSystem.cpp）
 extern InputSystem g_inputSystem;
@@ -25,11 +23,79 @@ LevelTreeList::LevelTreeList()
     , m_pView(nullptr)
     , m_inputSystem(&g_inputSystem)
     , m_loopInterval(std::chrono::milliseconds(20))
+    , m_selectedIndex(0)
+    , m_needRender(false)
 {
 }
-
 LevelTreeList::~LevelTreeList() {
     CloseIPC();
+}
+
+void LevelTreeList::ClearScreen() {
+    // \033[2J 清屏，\033[H 光标归位到左上角
+    std::cout << "\033[2J\033[H";
+}
+void LevelTreeList::RecursiveBuild(const std::map<std::string, ObjectData*>& children,
+    int depth, const std::string& prefix) {
+    // 获取子项数量
+    size_t count = children.size();
+    size_t idx = 0;
+    for (const auto& pair : children) {
+        ++idx;
+        bool isLast = (idx == count);
+        const std::string& objName = pair.first;
+        ObjectData* obj = pair.second;
+
+        // 构造当前节点的分支符号
+        std::string branch = isLast ? "`-- " : "|-- ";
+        std::string line = prefix + branch + objName;
+
+        // 计算传递给下一层的缩进前缀
+        std::string childPrefix = prefix + (isLast ? "    " : "|   ");
+
+        // 添加到显示列表
+        m_displayNodes.push_back({ line, prefix + branch, objName, obj, depth });
+
+        // 递归处理子对象
+        if (!obj->objects.empty()) {
+            RecursiveBuild(obj->objects, depth + 1, childPrefix);
+        }
+    }
+}
+void LevelTreeList::BuildDisplayList() {
+    m_displayNodes.clear();
+
+    if (!m_currentLevel) return;
+
+    // 场景作为根节点（深度 0，无前缀）
+    m_displayNodes.push_back({ m_currentLevel->name, "", m_currentLevel->name, nullptr, 0 });
+
+    // 递归添加场景的直接子对象（深度 1，无前缀）
+    RecursiveBuild(m_currentLevel->objects, 1, "");
+}
+void LevelTreeList::RenderTree() {
+    ClearScreen();
+
+    if (m_displayNodes.empty()) {
+        std::cout << "\033[37mNo level loaded.\033[0m" << std::endl;
+        return;
+    }
+
+    // 打印操作提示
+    std::cout << "\033[36mA/D: select previous/next  F: more operations\033[0m\n" << std::endl;
+
+    // 遍历显示节点
+    for (size_t i = 0; i < m_displayNodes.size(); ++i) {
+        const auto& node = m_displayNodes[i];
+
+        // 选中项使用反色高亮
+        if (static_cast<int>(i) == m_selectedIndex) {
+            std::cout << "\033[7m";  // 反转前景/背景色
+        }
+
+        // 树形线条与分支用青色，名称用白色
+        std::cout << "\033[36m" << node.prefix << "\033[37m" << node.name << "\033[0m\n";
+    }
 }
 
 void LevelTreeList::ConfigureConsole() {
@@ -194,6 +260,11 @@ void LevelTreeList::HandleOpenLevelEvent() {
         m_currentLevel = std::make_unique<LevelData>(std::move(level));
         std::string countMsg = "Level loaded successfully. Object count: " + std::to_string(m_currentLevel->objects.size()) + "\n";
         OutputDebugStringA(countMsg.c_str());
+
+        BuildDisplayList();
+        m_selectedIndex = 0;
+        m_needRender = true;
+        RenderTree();
     }
     catch (const std::exception& e) {
         std::string errMsg = "Failed to read level file: " + std::string(e.what()) + "\n";
@@ -207,31 +278,40 @@ void LevelTreeList::HandleOpenLevelEvent() {
 
 void LevelTreeList::ProcessInputEvents() {
     const auto& events = m_inputSystem->getEvents();
+    bool selectionChanged = false;
+
     for (const auto& ev : events) {
         if (ev.type == InputType::KeyDown) {
             switch (ev.key) {
             case KeyCode::A:
-                system("cls");
-                std::cout << "A/D: go back/next object" << std::endl;
-                std::cout << "F: more ops" << std::endl;
-                OutputDebugStringW(L"up\n");
+                if (m_selectedIndex > 0) {
+                    --m_selectedIndex;
+                    selectionChanged = true;
+                }
                 break;
             case KeyCode::D:
-                system("cls");
-                std::cout << "A/D: go back/next object" << std::endl;
-                std::cout << "F: more ops" << std::endl;
-                OutputDebugStringW(L"down\n");
+                if (m_selectedIndex < static_cast<int>(m_displayNodes.size()) - 1) {
+                    ++m_selectedIndex;
+                    selectionChanged = true;
+                }
                 break;
             case KeyCode::F:
-                system("cls");
-                std::cout << "A/D: go back/next object" << std::endl;
-                std::cout << "F: more ops" << std::endl;
-                OutputDebugStringW(L"F\n");
+                // 更多操作：暂时打印选中对象信息
+                if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_displayNodes.size())) {
+                    const auto& node = m_displayNodes[m_selectedIndex];
+                    std::string msg = "[LevelTreeList] More ops on: " + node.name + "\n";
+                    OutputDebugStringA(msg.c_str());
+                    // TODO: 在此处添加具体操作（例如弹出属性对话框）
+                }
                 break;
             default:
                 break;
             }
         }
+    }
+
+    if (selectionChanged) {
+        RenderTree();
     }
 }
 
