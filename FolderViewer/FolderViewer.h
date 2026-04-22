@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "KeyCode.h"
+#include "SharedTypes.h"
 
 // 前向声明
 class InputSystem;

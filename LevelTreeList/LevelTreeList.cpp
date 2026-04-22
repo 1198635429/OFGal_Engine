@@ -3,6 +3,8 @@
 #include "Json_LevelData_ReadWrite.h"
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <conio.h>
 
 // 全局输入系统实例（定义在 InputSystem.cpp）
 extern InputSystem g_inputSystem;
@@ -27,17 +29,77 @@ LevelTreeList::LevelTreeList()
     , m_needRender(false)
 {
 }
+
 LevelTreeList::~LevelTreeList() {
     CloseIPC();
+    // m_currentLevel 为 unique_ptr，会自动调用析构，递归释放所有 ObjectData
+}
+
+static bool SafeReadLine(std::string& out, const std::string& prompt, bool allowCancel = true) {
+    std::cout << prompt;
+    out.clear();
+    HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD oldMode;
+    GetConsoleMode(hIn, &oldMode);
+
+    // 清空所有残留的输入事件（包括键盘事件）
+    FlushConsoleInputBuffer(hIn);
+    INPUT_RECORD dummy;
+    DWORD read;
+    while (PeekConsoleInputW(hIn, &dummy, 1, &read) && read > 0) {
+        ReadConsoleInputW(hIn, &dummy, 1, &read);
+    }
+
+    // 调整控制台模式：禁用行缓冲和回显，启用窗口输入
+    DWORD newMode = oldMode;
+    newMode |= ENABLE_WINDOW_INPUT;
+    newMode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+    SetConsoleMode(hIn, newMode);
+
+    while (true) {
+        INPUT_RECORD ir;
+        if (!ReadConsoleInputW(hIn, &ir, 1, &read) || read == 0)
+            continue;
+        if (ir.EventType != KEY_EVENT || !ir.Event.KeyEvent.bKeyDown)
+            continue;
+
+        WORD vk = ir.Event.KeyEvent.wVirtualKeyCode;
+        WCHAR ch = ir.Event.KeyEvent.uChar.UnicodeChar;
+
+        if (vk == VK_RETURN) {
+            std::cout << "\n";
+            break;
+        }
+        if (allowCancel && vk == VK_ESCAPE) {
+            out = "#esc#";
+            std::cout << "#esc#\n";
+            SetConsoleMode(hIn, oldMode);
+            return false;
+        }
+        if (vk == VK_BACK) {
+            if (!out.empty()) {
+                out.pop_back();
+                std::cout << "\b \b";
+            }
+            continue;
+        }
+        if (ch >= 0x20 && ch <= 0x7E) {
+            char ascii = static_cast<char>(ch);
+            out.push_back(ascii);
+            std::cout << ascii;
+        }
+    }
+
+    SetConsoleMode(hIn, oldMode);
+    return true;
 }
 
 void LevelTreeList::ClearScreen() {
-    // \033[2J 清屏，\033[H 光标归位到左上角
     std::cout << "\033[2J\033[H";
 }
+
 void LevelTreeList::RecursiveBuild(const std::map<std::string, ObjectData*>& children,
     int depth, const std::string& prefix) {
-    // 获取子项数量
     size_t count = children.size();
     size_t idx = 0;
     for (const auto& pair : children) {
@@ -46,60 +108,42 @@ void LevelTreeList::RecursiveBuild(const std::map<std::string, ObjectData*>& chi
         const std::string& objName = pair.first;
         ObjectData* obj = pair.second;
 
-        // 构造当前节点的分支符号
         std::string branch = isLast ? "`-- " : "|-- ";
         std::string line = prefix + branch + objName;
-
-        // 计算传递给下一层的缩进前缀
         std::string childPrefix = prefix + (isLast ? "    " : "|   ");
 
-        // 添加到显示列表
         m_displayNodes.push_back({ line, prefix + branch, objName, obj, depth });
 
-        // 递归处理子对象
         if (!obj->objects.empty()) {
             RecursiveBuild(obj->objects, depth + 1, childPrefix);
         }
     }
 }
+
 void LevelTreeList::BuildDisplayList() {
     m_displayNodes.clear();
-
     if (!m_currentLevel) return;
-
-    // 场景作为根节点（深度 0，无前缀）
     m_displayNodes.push_back({ m_currentLevel->name, "", m_currentLevel->name, nullptr, 0 });
-
-    // 递归添加场景的直接子对象（深度 1，无前缀）
     RecursiveBuild(m_currentLevel->objects, 1, "");
 }
+
 void LevelTreeList::RenderTree() {
     ClearScreen();
-
     if (m_displayNodes.empty()) {
         std::cout << "\033[37mNo level loaded.\033[0m" << std::endl;
         return;
     }
-
-    // 打印操作提示
-    std::cout << "\033[36mA/D: select previous/next  F: more operations\033[0m\n" << std::endl;
-
-    // 遍历显示节点
+    std::cout << "\033[36mA/D: select previous/next  J: add object  K: delete object\033[0m\n" << std::endl;
     for (size_t i = 0; i < m_displayNodes.size(); ++i) {
         const auto& node = m_displayNodes[i];
-
-        // 选中项使用反色高亮
         if (static_cast<int>(i) == m_selectedIndex) {
-            std::cout << "\033[7m";  // 反转前景/背景色
+            std::cout << "\033[7m";
         }
-
-        // 树形线条与分支用青色，名称用白色
         std::cout << "\033[36m" << node.prefix << "\033[37m" << node.name << "\033[0m\n";
     }
 }
 
 void LevelTreeList::ConfigureConsole() {
-    // 启用虚拟终端处理
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
@@ -108,8 +152,6 @@ void LevelTreeList::ConfigureConsole() {
             SetConsoleMode(hOut, dwMode);
         }
     }
-
-    // 禁用快速编辑模式
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     if (hIn != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
@@ -147,12 +189,10 @@ void LevelTreeList::SetWindowSizeAndPosition() {
 
 bool LevelTreeList::OpenIPC() {
     const std::wstring eventName = L"Global\\OFGal_Engine_LevelTreeList_PathUpdate";
-
     const std::wstring sharedMemName =
         L"Global\\OFGal_Engine_ProjectStructureViewer_"
         L"FolderViewer_OpenLevelPath";
 
-    // 1. 打开事件
     m_hEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, eventName.c_str());
     if (m_hEvent == NULL) {
         DWORD err = GetLastError();
@@ -164,11 +204,6 @@ bool LevelTreeList::OpenIPC() {
         }
         return false;
     }
-    WCHAR buf[256];
-    swprintf_s(buf, L"[LevelTreeList] Event opened successfully. Handle: %p\n", m_hEvent);
-    OutputDebugStringW(buf);
-
-    // 2. 打开共享内存
     m_hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, sharedMemName.c_str());
     if (m_hMapFile == NULL) {
         DWORD err = GetLastError();
@@ -179,10 +214,6 @@ bool LevelTreeList::OpenIPC() {
         m_hEvent = NULL;
         return false;
     }
-    swprintf_s(buf, L"[LevelTreeList] Shared memory opened successfully. Handle: %p\n", m_hMapFile);
-    OutputDebugStringW(buf);
-
-    // 3. 映射视图
     m_pView = MapViewOfFile(m_hMapFile, FILE_MAP_READ, 0, 0, 0);
     if (m_pView == NULL) {
         WCHAR buf[128];
@@ -194,9 +225,6 @@ bool LevelTreeList::OpenIPC() {
         m_hEvent = NULL;
         return false;
     }
-    swprintf_s(buf, L"[LevelTreeList] Shared memory view mapped. Address: %p\n", m_pView);
-    OutputDebugStringW(buf);
-
     return true;
 }
 
@@ -216,51 +244,47 @@ void LevelTreeList::CloseIPC() {
 }
 
 bool LevelTreeList::Initialize() {
-    // 配置控制台
     ConfigureConsole();
     SetConsoleTitleW(L"OFGal_Engine/LevelTreeList");
     SetWindowSizeAndPosition();
-
     OutputDebugStringW(L"[LevelTreeList] Started. Initializing IPC...\n");
-
     if (!OpenIPC()) {
         system("pause");
         return false;
     }
 
-    // 初始化输入收集器
+    HWND hConsole = GetConsoleWindow();
+    m_inputSystem->SetWindowHandle(hConsole);
+    m_inputSystem->SetGlobalCapture(false);
+
     m_inputCollector = std::make_unique<InputCollector>(m_inputSystem);
     m_inputCollector->AddBinding({ 'A', Modifier::None, KeyCode::A, true });
     m_inputCollector->AddBinding({ 'D', Modifier::None, KeyCode::D, true });
-    m_inputCollector->AddBinding({ 'F', Modifier::None, KeyCode::F, true });
-
+    m_inputCollector->AddBinding({ 'J', Modifier::None, KeyCode::J, true });
+    m_inputCollector->AddBinding({ 'K', Modifier::None, KeyCode::K, true });
     OutputDebugStringW(L"[LevelTreeList] Input bindings configured. Entering main loop...\n");
-
     m_running = true;
     return true;
 }
 
 void LevelTreeList::HandleOpenLevelEvent() {
     OutputDebugStringW(L"[LevelTreeList] OpenLevel event triggered!\n");
-
     const WCHAR* path = static_cast<const WCHAR*>(m_pView);
     if (path == nullptr || wcslen(path) == 0) {
         OutputDebugStringW(L"[LevelTreeList] ERROR: Shared memory path is empty or null.\n");
         return;
     }
-
     std::wstring openedLevelPath(path);
     std::wstring msg = L"[LevelTreeList] Path from shared memory: " + openedLevelPath + L"\n";
     OutputDebugStringW(msg.c_str());
 
-    // 转换为 UTF-8 并读取 .level 文件
     std::string utf8Path = WstrToUtf8(openedLevelPath);
     try {
         LevelData level = ReadLevelData(utf8Path);
         m_currentLevel = std::make_unique<LevelData>(std::move(level));
+        m_currentLevelPath = utf8Path;
         std::string countMsg = "Level loaded successfully. Object count: " + std::to_string(m_currentLevel->objects.size()) + "\n";
         OutputDebugStringA(countMsg.c_str());
-
         BuildDisplayList();
         m_selectedIndex = 0;
         m_needRender = true;
@@ -270,13 +294,265 @@ void LevelTreeList::HandleOpenLevelEvent() {
         std::string errMsg = "Failed to read level file: " + std::string(e.what()) + "\n";
         OutputDebugStringA(errMsg.c_str());
     }
-
     if (m_hEvent) {
         ResetEvent(m_hEvent);
     }
 }
 
+bool LevelTreeList::IsNameUsed(const std::string& name) const {
+    if (!m_currentLevel) return false;
+    if (m_currentLevel->name == name) return true;
+    for (const auto& pair : m_currentLevel->objects) {
+        if (IsNameUsedInObject(pair.second, name)) return true;
+    }
+    return false;
+}
+
+bool LevelTreeList::IsNameUsedInObject(const ObjectData* obj, const std::string& name) const {
+    if (!obj) return false;
+    if (obj->name == name) return true;
+    for (const auto& pair : obj->objects) {
+        if (IsNameUsedInObject(pair.second, name)) return true;
+    }
+    return false;
+}
+
+void LevelTreeList::SaveCurrentLevel() {
+    if (!m_currentLevel || m_currentLevelPath.empty()) return;
+    try {
+        WriteLevelData(m_currentLevelPath, *m_currentLevel);
+        OutputDebugStringA(("[LevelTreeList] Saved to " + m_currentLevelPath + "\n").c_str());
+    }
+    catch (const std::exception& e) {
+        std::string err = "[LevelTreeList] Failed to save level: " + std::string(e.what()) + "\n";
+        OutputDebugStringA(err.c_str());
+    }
+}
+
+// 改进后的删除函数：仅通过对象指针删除
+void LevelTreeList::RemoveObjectFromParent(ObjectData* obj) {
+    if (!obj || !m_currentLevel) return;
+
+    ObjectData* parent = obj->parent;
+    std::map<std::string, ObjectData*>* container = nullptr;
+
+    if (parent == nullptr) {
+        // 父容器为场景根
+        container = &m_currentLevel->objects;
+    }
+    else {
+        container = &parent->objects;
+    }
+
+    // 根据对象名称从容器中移除（注意：名称是唯一的）
+    auto it = container->find(obj->name);
+    if (it != container->end() && it->second == obj) {
+        // 直接删除对象，其析构函数会递归删除所有子对象
+        delete obj;
+        container->erase(it);
+    }
+}
+
+// 清除输入流中的残留数据
+void LevelTreeList::ClearInputStream() {
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+// 询问单个组件，支持取消指令
+bool LevelTreeList::AskComponent(const std::string& componentName) {
+    while (true) {
+        std::cout << "  " << componentName << "? (y/n): ";
+        std::string input;
+        std::getline(std::cin, input);
+        if (input == "#esc#") {
+            throw std::runtime_error("cancelled");
+        }
+        if (input == "y" || input == "Y") {
+            return true;
+        }
+        if (input == "n" || input == "N") {
+            return false;
+        }
+        std::cout << "Invalid input, please enter y/n or #esc# to cancel.\n";
+    }
+}
+
+void LevelTreeList::AddObjectInteractive() {
+    if (!m_currentLevel) return;
+
+    m_inInteractiveMode = true;  // 暂停快捷键处理
+
+    if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_displayNodes.size())) {
+        m_inInteractiveMode = false;
+        return;
+    }
+    const auto& selectedNode = m_displayNodes[m_selectedIndex];
+    std::string parentName = selectedNode.name;
+    ObjectData* parentObj = selectedNode.object;
+
+    ClearScreen();
+    std::cout << "You are about to create a new object under \"" << parentName << "\"\n";
+    std::cout << "(Press ESC at any prompt to cancel)\n\n";
+
+    std::string newName;
+    while (true) {
+        if (!SafeReadLine(newName, "Enter object name: ", true)) {
+            std::cout << "Operation cancelled.\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            m_inInteractiveMode = false;
+            RenderTree();
+            return;
+        }
+        if (newName.empty()) {
+            std::cout << "Name cannot be empty. Try again.\n";
+            continue;
+        }
+        if (IsNameUsed(newName)) {
+            std::cout << "Name \"" << newName << "\" already exists. Please choose a different name.\n";
+            continue;
+        }
+        break;
+    }
+
+    // 询问组件（同样使用 SafeReadLine）
+    std::cout << "\nSelect components to add:\n";
+    bool addTransform = false, addPicture = false, addTextblock = false;
+    bool addTrigger = false, addBlueprint = false;
+
+    // 辅助 lambda
+    auto ask = [&](const std::string& compName) -> bool {
+        while (true) {
+            std::string ans;
+            std::string prompt = "  " + compName + "? (y/n): ";
+            if (!SafeReadLine(ans, prompt, true)) {
+                throw std::runtime_error("cancelled");
+            }
+            if (ans == "y" || ans == "Y") return true;
+            if (ans == "n" || ans == "N") return false;
+            std::cout << "Invalid input, please enter y/n or press ESC to cancel.\n";
+        }
+        };
+
+    try {
+        addTransform = ask("TransformComponent");
+        addPicture = ask("PictureComponent");
+        addTextblock = ask("TextblockComponent");
+        addTrigger = ask("TriggerAreaComponent");
+        addBlueprint = ask("BlueprintComponent");
+    }
+    catch (const std::runtime_error&) {
+        std::cout << "Operation cancelled.\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        m_inInteractiveMode = false;
+        RenderTree();
+        return;
+    }
+
+    // 3. 创建对象
+    ObjectData* newObj = new ObjectData();
+    newObj->name = newName;
+    newObj->parent = parentObj;
+
+    if (addTransform) {
+        TransformComponent tc;
+        tc.Location = { 0.0f, 0.0f, 0 };
+        tc.Rotation = { 0.0f };
+        tc.Scale = { 1.0f, 1.0f };
+        newObj->Transform = tc;
+    }
+    if (addPicture) {
+        PictureComponent pc;
+        pc.Path = "";
+        pc.Location = { 0.0f, 0.0f, 0 };
+        pc.Rotation = { 0.0f };
+        pc.Size = { 0.0f, 0.0f };
+        newObj->Picture = pc;
+    }
+    if (addTextblock) {
+        TextblockComponent tc;
+        tc.Location = { 0, 0 };
+        tc.Size = { 0, 0 };
+        tc.Text.component = "";
+        tc.Text.Font_size = 0;
+        tc.Text.ANSI_Print = false;
+        tc.Scale = { 1.0f, 1.0f };
+        newObj->Textblock = tc;
+    }
+    if (addTrigger) {
+        TriggerAreaComponent tac;
+        tac.Location = { 0.0f, 0.0f };
+        tac.Size = { 0.0f, 0.0f };
+        newObj->TriggerArea = tac;
+    }
+    if (addBlueprint) {
+        BlueprintComponent bc;
+        bc.Path = "";
+        newObj->Blueprint = bc;
+    }
+
+    if (parentObj == nullptr) {
+        m_currentLevel->objects[newName] = newObj;
+    }
+    else {
+        parentObj->objects[newName] = newObj;
+    }
+
+    BuildDisplayList();
+    if (m_selectedIndex >= static_cast<int>(m_displayNodes.size()))
+        m_selectedIndex = static_cast<int>(m_displayNodes.size()) - 1;
+
+    m_inInteractiveMode = false;
+    RenderTree();
+    SaveCurrentLevel();
+}
+
+void LevelTreeList::DeleteSelectedObject() {
+    if (!m_currentLevel) return;
+
+    m_inInteractiveMode = true;
+
+    if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<int>(m_displayNodes.size())) {
+        m_inInteractiveMode = false;
+        return;
+    }
+    const auto& selectedNode = m_displayNodes[m_selectedIndex];
+    if (selectedNode.object == nullptr) {
+        m_inInteractiveMode = false;
+        return;
+    }
+
+    std::string objName = selectedNode.name;
+    ObjectData* obj = selectedNode.object;
+
+    ClearScreen();
+    std::cout << "You are about to delete \"" << objName << "\" and all its children.\n";
+    std::string confirm;
+    SafeReadLine(confirm, "Confirm (Y/N): ", true);
+    // 允许 ESC 取消，但若输入 #esc# 则视为取消
+    if (confirm == "#esc#" || confirm.empty()) {
+        std::cout << "Deletion cancelled.\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        m_inInteractiveMode = false;
+        RenderTree();
+        return;
+    }
+
+    if (confirm == "Y" || confirm == "y") {
+        RemoveObjectFromParent(obj);
+        BuildDisplayList();
+        if (m_selectedIndex >= static_cast<int>(m_displayNodes.size()))
+            m_selectedIndex = static_cast<int>(m_displayNodes.size()) - 1;
+        SaveCurrentLevel();
+    }
+
+    m_inInteractiveMode = false;
+    RenderTree();
+}
+
 void LevelTreeList::ProcessInputEvents() {
+    if (m_inInteractiveMode) return;  // 交互模式下忽略所有输入事件
+
     const auto& events = m_inputSystem->getEvents();
     bool selectionChanged = false;
 
@@ -295,14 +571,13 @@ void LevelTreeList::ProcessInputEvents() {
                     selectionChanged = true;
                 }
                 break;
-            case KeyCode::F:
-                // 更多操作：暂时打印选中对象信息
-                if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_displayNodes.size())) {
-                    const auto& node = m_displayNodes[m_selectedIndex];
-                    std::string msg = "[LevelTreeList] More ops on: " + node.name + "\n";
-                    OutputDebugStringA(msg.c_str());
-                    // TODO: 在此处添加具体操作（例如弹出属性对话框）
-                }
+            case KeyCode::J:
+                AddObjectInteractive();
+                selectionChanged = false;
+                break;
+            case KeyCode::K:
+                DeleteSelectedObject();
+                selectionChanged = false;
                 break;
             default:
                 break;
@@ -317,28 +592,18 @@ void LevelTreeList::ProcessInputEvents() {
 
 void LevelTreeList::Run() {
     OutputDebugStringW(L"[LevelTreeList] Entering main loop.\n");
-
-    // 检查事件句柄
     if (m_hEvent == NULL || m_hEvent == INVALID_HANDLE_VALUE) {
         OutputDebugStringW(L"[LevelTreeList] ERROR: Event handle is invalid!\n");
         return;
     }
-
-    // 初始状态检查（调试用）
-    DWORD initialWait = WaitForSingleObject(m_hEvent, 0);
-    WCHAR buf[128];
-    swprintf_s(buf, L"[LevelTreeList] Initial event state: %lu (0=signaled, 258=timeout, 0xFFFFFFFF=error)\n", initialWait);
-    OutputDebugStringW(buf);
-
     while (m_running) {
-        // 1. 检查 IPC 事件（非阻塞）
         DWORD waitResult = WaitForSingleObject(m_hEvent, 0);
         if (waitResult == WAIT_OBJECT_0) {
             OutputDebugStringW(L"[LevelTreeList] Event signaled!\n");
             HandleOpenLevelEvent();
         }
         else if (waitResult == WAIT_TIMEOUT) {
-            // 正常超时，不输出（避免刷屏）
+            // normal
         }
         else {
             WCHAR errBuf[128];
@@ -348,19 +613,14 @@ void LevelTreeList::Run() {
             break;
         }
 
-        // 2. 更新输入收集器
-        m_inputCollector->update();
-
-        // 3. 处理输入事件
+        // 交互模式下不收集新输入事件
+        if (!m_inInteractiveMode) {
+            m_inputCollector->update();
+        }
         ProcessInputEvents();
-
-        // 4. 清除本帧事件
         m_inputSystem->clearEvent();
-
-        // 5. 休眠 20ms
         std::this_thread::sleep_for(m_loopInterval);
     }
-
     OutputDebugStringW(L"[LevelTreeList] Exited cleanly.\n");
 }
 

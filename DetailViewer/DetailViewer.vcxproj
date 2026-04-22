@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{4717fa13-6627-4101-a7ed-d94757e521eb}</ProjectGuid>
-    <RootNamespace>FolderViewer</RootNamespace>
+    <ProjectGuid>{53169c77-9b22-4f95-89e1-b59d71f8b3ce}</ProjectGuid>
+    <RootNamespace>DetailViewer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -102,7 +102,6 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -124,17 +123,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FolderViewer.cpp" />
-    <ClCompile Include="InputCollector.cpp" />
-    <ClCompile Include="InputSystem.cpp" />
     <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="FolderViewer.h" />
-    <ClInclude Include="InputCollector.h" />
-    <ClInclude Include="InputSystem.h" />
-    <ClInclude Include="IpcResources.h" />
-    <ClInclude Include="SharedTypes.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

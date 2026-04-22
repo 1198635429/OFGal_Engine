@@ -36,6 +36,7 @@ struct BMP_Data {
     int height;
     std::vector<BMP_Pixel> pixels;
 };
+
 // 坐标与尺寸辅助结构
 struct Location3D {
     float x = 0.0f;
@@ -107,21 +108,78 @@ struct BlueprintComponent {
     std::string Path;
 };
 
+// ========== ObjectData ==========
 struct ObjectData {
     std::string name;
-    ObjectData* parent;		//如果是以场景为父对象，则为 nullptr
+    ObjectData* parent = nullptr;
     std::map<std::string, ObjectData*> objects;
     std::optional<TransformComponent> Transform;
     std::optional<PictureComponent> Picture;
     std::optional<TextblockComponent> Textblock;
     std::optional<TriggerAreaComponent> TriggerArea;
     std::optional<BlueprintComponent> Blueprint;
+
+    // 显式默认构造函数
+    ObjectData() = default;
+
+    // 递归析构：安全释放所有子对象
+    ~ObjectData() {
+        for (auto& pair : objects) {
+            delete pair.second;
+        }
+        objects.clear();
+    }
+
+    // 禁止拷贝
+    ObjectData(const ObjectData&) = delete;
+    ObjectData& operator=(const ObjectData&) = delete;
+
+    // 禁止移动（移动会导致指针复制，同样引发双重释放）
+    ObjectData(ObjectData&&) = delete;
+    ObjectData& operator=(ObjectData&&) = delete;
 };
 
-// 场景结构
+// ========== LevelData ==========
 struct LevelData {
-    std::string name;                                    // 场景名（JSON顶层键）
-    std::map<std::string, ObjectData*> objects; // 对象名 -> 对象数据
+    std::string name;
+    std::map<std::string, ObjectData*> objects;
+
+    // 显式默认构造函数
+    LevelData() = default;
+
+    // 析构：释放所有对象
+    ~LevelData() {
+        for (auto& pair : objects) {
+            delete pair.second;
+        }
+        objects.clear();
+    }
+
+    // 禁止拷贝
+    LevelData(const LevelData&) = delete;
+    LevelData& operator=(const LevelData&) = delete;
+
+    // 允许移动（需要显式声明，因为定义了析构函数）
+    LevelData(LevelData&& other) noexcept
+        : name(std::move(other.name)), objects(std::move(other.objects)) {
+        // 将源对象的 map 清空，防止其析构时再次删除
+        other.objects.clear();
+    }
+
+    LevelData& operator=(LevelData&& other) noexcept {
+        if (this != &other) {
+            // 先释放当前对象拥有的资源
+            for (auto& pair : objects) {
+                delete pair.second;
+            }
+            objects.clear();
+
+            name = std::move(other.name);
+            objects = std::move(other.objects);
+            other.objects.clear();
+        }
+        return *this;
+    }
 };
 
 struct TreeDisplayInfo {
@@ -135,59 +193,33 @@ struct SelectedFolderInfo {
 };
 
 // ==================== 输入系统相关 ====================
-// 键码枚举
+// （保持不变）
 enum class KeyCode {
     Unknown = 0,
-
-    // 字母键 (A-Z)
     A, B, C, D, E, F, G, H, I, J, K, L, M,
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-
-    // 数字键 (主键盘区)
     Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
-
-    // 功能键
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
-
-    // 修饰键
     LShift, RShift, LControl, RControl, LAlt, RAlt,
     LWin, RWin,
     CapsLock, NumLock, ScrollLock,
-
-    // 导航与编辑键
     Space, Enter, Backspace, Tab,
     Escape, Pause, PrintScreen,
     Insert, Delete, Home, End, PageUp, PageDown,
     Left, Right, Up, Down,
-
-    // 符号键（无 Shift 状态）
     Grave, Minus, Equal, LeftBracket, RightBracket, Backslash,
     Semicolon, Apostrophe, Comma, Period, Slash,
-
-    // 小键盘区
     Numpad0, Numpad1, Numpad2, Numpad3, Numpad4,
     Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
     NumpadAdd, NumpadSubtract, NumpadMultiply, NumpadDivide, NumpadDecimal,
     NumpadEnter,
-
-    // 多媒体与浏览器键
     VolumeMute, VolumeDown, VolumeUp,
     MediaNext, MediaPrev, MediaStop, MediaPlayPause,
     BrowserBack, BrowserForward, BrowserRefresh, BrowserHome,
-
-    // 应用程序特定组合
-    CtrlS,          // Ctrl + S
-    CtrlN,          // Ctrl + N
-
-    // 鼠标按键
-    MouseLeft,
-    MouseRight,
-    MouseMiddle,
-    MouseX1,        // 侧键后退
-    MouseX2         // 侧键前进
+    CtrlS, CtrlN,
+    MouseLeft, MouseRight, MouseMiddle, MouseX1, MouseX2
 };
 
-// 修饰键枚举
 enum class Modifier {
     None = 0,
     Ctrl = 1 << 0,
@@ -199,15 +231,13 @@ inline Modifier operator|(Modifier a, Modifier b) {
     return static_cast<Modifier>(static_cast<int>(a) | static_cast<int>(b));
 }
 
-// 键位绑定结构
 struct KeyBinding {
-    int      vk;           // 虚拟键码 (如 'N', VK_DELETE)
-    Modifier modifiers;    // 需要的修饰键
-    KeyCode  eventCode;    // 触发时生成的事件码
-    bool     edgeOnly;     // true = 仅按下瞬间触发一次；false = 按下/释放均触发
+    int      vk;
+    Modifier modifiers;
+    KeyCode  eventCode;
+    bool     edgeOnly;
 };
 
-// 输入事件类型
 enum class InputType {
     KeyDown,
     KeyUp,
@@ -216,7 +246,6 @@ enum class InputType {
     MouseDown
 };
 
-// 输入事件结构
 struct InputEvent {
     InputType type;
     KeyCode   key;
@@ -224,7 +253,6 @@ struct InputEvent {
     int       mouseY = 0;
 };
 
-// ==================== IPC / 对话框相关 ====================
 struct YesNoDialogData {
     WCHAR message[300];
     BOOL  result;

@@ -13,12 +13,12 @@
 					"r": 0.0
 				},
 				"Scale": {
-					"x": 0.7,
-					"y": 0.7
+					"x": 1.0,
+					"y": 1.0
 				}
 			},
 			"Picture": {
-				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\BA_imitate\\1218817058308192.bmp",
+				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\1218817058308192.bmp",
 				"Location": {
 					"x": 0.0,
 					"y": 0.0,
@@ -50,7 +50,7 @@
 				}
 			},
 			"Picture": {
-				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\BA_imitate\\rifumei.bmp",
+				"Path": "E:\\Projects\\C++Projects\\OFGal_Engine\\rifumei.bmp",
 				"Location": {
 					"x": 900.0,
 					"y": 50.0,

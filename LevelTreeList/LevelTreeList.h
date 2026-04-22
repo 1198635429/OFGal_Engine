@@ -1,12 +1,14 @@
 // Copyright 2026 Nagato-Yuki-708. All Rights Reserved.
 #pragma once
 
+#define NOMINMAX
 #include <windows.h>
 #include <string>
 #include <chrono>
 #include <thread>
 #include <memory>
 #include <vector>
+#include <functional>   // 新增：用于 std::function
 
 #include "SharedTypes.h"
 #include "InputSystem.h"
@@ -38,13 +40,30 @@ private:
         int depth;                    // 深度（0 为场景）
     };
 
-    void BuildDisplayList();                                           // 构建 m_displayNodes
+    void BuildDisplayList();
     void RecursiveBuild(const std::map<std::string, ObjectData*>& children,
-        int depth, const std::string& prefix);        // 递归构建子节点
-    void RenderTree();                                                 // 绘制整个树状列表
-    void ClearScreen();                                                // ANSI 清屏并归位光标
+        int depth, const std::string& prefix);
+    void RenderTree();
+    void ClearScreen();
 
-    // --- 成员变量（部分已有）---
+    bool IsNameUsed(const std::string& name) const;
+    bool IsNameUsedInObject(const ObjectData* obj, const std::string& name) const;
+
+    void AddObjectInteractive();
+    void DeleteSelectedObject();
+
+    void SaveCurrentLevel();
+
+    // 删除对象（仅需对象指针）
+    void RemoveObjectFromParent(ObjectData* obj);
+
+    // 辅助输入函数：清除 cin 缓冲区
+    void ClearInputStream();
+
+    // 辅助函数：询问单个组件
+    bool AskComponent(const std::string& componentName);
+
+    // --- 成员变量 ---
     bool m_running;
 
     HANDLE m_hEvent;
@@ -55,9 +74,11 @@ private:
     std::unique_ptr<InputCollector> m_inputCollector;
     std::chrono::milliseconds m_loopInterval;
 
-    std::unique_ptr<LevelData> m_currentLevel;          // 当前加载的场景数据
+    std::unique_ptr<LevelData> m_currentLevel;   // 自动管理内存
+    std::string m_currentLevelPath;
 
-    std::vector<DisplayNode> m_displayNodes;            // 扁平化的显示列表
-    int m_selectedIndex;                                // 当前选中项的索引（0 为场景）
-    bool m_needRender;                                  // 是否需要重绘（按键后置 true）
+    std::vector<DisplayNode> m_displayNodes;
+    int m_selectedIndex;
+    bool m_needRender;
+    bool m_inInteractiveMode = false;
 };

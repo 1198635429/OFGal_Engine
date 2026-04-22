@@ -1,13 +1,23 @@
 #pragma once
-#include "InputEvent.h"
+#include "SharedTypes.h"
 #include <vector>
 #include <mutex>
+#include <windows.h>
+
 class InputSystem {
 public:
-	void clearEvent();  //Ã¿Ò»Ö¡¸üĞÂ£¬ÓÃÓÚ¹ÜÀíÉúÃüÖÜÆÚ
-	void pushEvent(const InputEvent& event);   //Ìí¼ÓÊäÈëÊÂ¼ş,
-	const std::vector<InputEvent>& getEvents() ;  //»ñÈ¡ÊäÈëÊÂ¼ş
+    void clearEvent();
+    void pushEvent(const InputEvent& event);
+    const std::vector<InputEvent>& getEvents();
+
+    void SetWindowHandle(HWND hWnd);
+    void SetGlobalCapture(bool enable);
+    bool GetGlobalCapture() const;
+    bool ShouldCaptureInput() const;
+
 private:
-	std::vector<InputEvent>events;  //ÊäÈëÊÂ¼ş¶ÓÁĞ
-	std::mutex mtx;   //´´½¨Ò»¸ö»¥³âËø£»
+    std::vector<InputEvent> events;
+    std::mutex mtx;
+    HWND m_hWnd = nullptr;          // æœ¬ç¨‹åºçª—å£å¥æŸ„
+    bool m_globalCapture = false;   // é»˜è®¤ä»…ç„¦ç‚¹æ—¶æ•æ‰
 };

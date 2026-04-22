@@ -1,15 +1,39 @@
 #include <iostream>
 #include "InputSystem.h"
-InputSystem g_inputSystem;  //全局输入系统实例
-void InputSystem::clearEvent() {   //用于检测每一帧的键盘状态
-	std::lock_guard<std::mutex> lock(mtx);
-	events.clear();  //清楚上一帧的事件
+
+InputSystem g_inputSystem;  // 鍏ㄥ眬杈撳叆绯荤粺瀹炰緥
+
+void InputSystem::clearEvent() {
+    std::lock_guard<std::mutex> lock(mtx);
+    events.clear();
 }
-void InputSystem::pushEvent(const InputEvent& event) {		//加入事件
-	std::lock_guard<std::mutex>  lock(mtx);  //创建一个锁
-	events.push_back(event);         
+
+void InputSystem::pushEvent(const InputEvent& event) {
+    std::lock_guard<std::mutex> lock(mtx);
+    events.push_back(event);
 }
-const std::vector<InputEvent>& InputSystem::getEvents()  {
-	std::lock_guard<std::mutex> lock(mtx);    //会自动释放锁，保证线程安全
-	return events;
+
+const std::vector<InputEvent>& InputSystem::getEvents() {
+    std::lock_guard<std::mutex> lock(mtx);
+    return events;
+}
+
+void InputSystem::SetWindowHandle(HWND hWnd) {
+    m_hWnd = hWnd;
+}
+
+void InputSystem::SetGlobalCapture(bool enable) {
+    m_globalCapture = enable;
+}
+
+bool InputSystem::GetGlobalCapture() const {
+    return m_globalCapture;
+}
+
+bool InputSystem::ShouldCaptureInput() const {
+    if (m_globalCapture)
+        return true;
+    if (m_hWnd == nullptr)
+        return true;   // 鑻ユ湭璁剧疆绐楀彛鍙ユ焺锛屼繚瀹堝湴鍏佽鎹曟崏
+    return GetForegroundWindow() == m_hWnd;
 }

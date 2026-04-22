@@ -44,12 +44,6 @@
     <ClInclude Include="InputCollector.h">
       <Filter>Header Files\Input</Filter>
     </ClInclude>
-    <ClInclude Include="InputEvent.h">
-      <Filter>Header Files\Input</Filter>
-    </ClInclude>
-    <ClInclude Include="KeyCode.h">
-      <Filter>Header Files\Input</Filter>
-    </ClInclude>
     <ClInclude Include="FolderViewer.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -2,8 +2,6 @@
 #include "FolderViewer.h"
 #include "InputSystem.h"
 #include "InputCollector.h"
-#include "InputEvent.h"
-#include "KeyCode.h"
 #include "SharedTypes.h"
 #include <filesystem>
 #include <iostream>
@@ -96,6 +94,9 @@ FolderViewer::FolderViewer()
     }
     m_inputSystem = std::make_unique<InputSystem>();
     m_inputCollector = std::make_unique<InputCollector>(m_inputSystem.get());
+
+    m_inputSystem->SetWindowHandle(hwndConsole);
+    m_inputSystem->SetGlobalCapture(false);
 
     // 注册需要的按键绑定
     // 单键：Delete（边缘触发）
