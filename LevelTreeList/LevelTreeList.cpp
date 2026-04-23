@@ -9,6 +9,10 @@
 // 全局输入系统实例（定义在 InputSystem.cpp）
 extern InputSystem g_inputSystem;
 
+// 共享内存大小：足够存放最长路径
+static const DWORD SHARED_PATH_BUFFER_SIZE = 1024;
+static const DWORD OBJECT_NAME_BUFFER_SIZE = 1024;
+
 // 辅助函数：将宽字符串转换为 UTF-8 字符串
 static std::string WstrToUtf8(const std::wstring& wstr) {
     if (wstr.empty()) return std::string();
@@ -17,12 +21,27 @@ static std::string WstrToUtf8(const std::wstring& wstr) {
     WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
     return strTo;
 }
+// 辅助函数：UTF-8 转宽字符串
+static std::wstring Utf8ToWstr(const std::string& utf8) {
+    if (utf8.empty()) return std::wstring();
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), NULL, 0);
+    std::wstring wstr(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), (int)utf8.size(), &wstr[0], size_needed);
+    return wstr;
+}
 
 LevelTreeList::LevelTreeList()
     : m_running(false)
     , m_hEvent(NULL)
     , m_hMapFile(NULL)
     , m_pView(nullptr)
+    , m_hPathUpdateEvent(NULL)
+    , m_hDataChangedEvent(NULL)
+    , m_hPathSharedMem(NULL)
+    , m_pPathSharedView(nullptr)
+    , m_hObjectChangedEvent(NULL)
+    , m_hObjectSharedMem(NULL)
+    , m_pObjectSharedView(nullptr)
     , m_inputSystem(&g_inputSystem)
     , m_loopInterval(std::chrono::milliseconds(20))
     , m_selectedIndex(0)
@@ -32,7 +51,6 @@ LevelTreeList::LevelTreeList()
 
 LevelTreeList::~LevelTreeList() {
     CloseIPC();
-    // m_currentLevel 为 unique_ptr，会自动调用析构，递归释放所有 ObjectData
 }
 
 static bool SafeReadLine(std::string& out, const std::string& prompt, bool allowCancel = true) {
@@ -96,6 +114,116 @@ static bool SafeReadLine(std::string& out, const std::string& prompt, bool allow
 
 void LevelTreeList::ClearScreen() {
     std::cout << "\033[2J\033[H";
+}
+
+bool LevelTreeList::CreateDetailViewerIPC() {
+    // 1. 创建事件：PathUpdate（自动重置）
+    m_hPathUpdateEvent = CreateEventW(
+        NULL, FALSE, FALSE,
+        L"Global\\OFGal_Engine_LevelTreeList_DetailViewer_PathUpdate");
+    if (!m_hPathUpdateEvent) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create PathUpdate event.\n");
+        return false;
+    }
+
+    // 2. 创建事件：DataChanged（自动重置）
+    m_hDataChangedEvent = CreateEventW(
+        NULL, FALSE, FALSE,
+        L"Global\\OFGal_Engine_LevelTreeList_DetailViewer_DataChanged");
+    if (!m_hDataChangedEvent) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create DataChanged event.\n");
+        return false;
+    }
+
+    // 3. 创建共享内存
+    m_hPathSharedMem = CreateFileMappingW(
+        INVALID_HANDLE_VALUE,
+        NULL,
+        PAGE_READWRITE,
+        0,
+        SHARED_PATH_BUFFER_SIZE,
+        L"Global\\OFGal_Engine_LevelTreeList_DetailViewer_PathSharedMem");
+    if (!m_hPathSharedMem) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create path shared memory.\n");
+        return false;
+    }
+
+    // 4. 映射视图
+    m_pPathSharedView = MapViewOfFile(
+        m_hPathSharedMem,
+        FILE_MAP_ALL_ACCESS,
+        0, 0,
+        SHARED_PATH_BUFFER_SIZE);
+    if (!m_pPathSharedView) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to map path shared memory view.\n");
+        return false;
+    }
+    // 5. 创建 ObjectChanged 事件（自动重置）
+    m_hObjectChangedEvent = CreateEventW(
+        NULL, FALSE, FALSE,
+        L"Global\\OFGal_Engine_LevelTreeList_DetailViewer_ObjectChanged");
+    if (!m_hObjectChangedEvent) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create ObjectChanged event.\n");
+        return false;
+    }
+
+    // 6. 创建对象名共享内存
+    m_hObjectSharedMem = CreateFileMappingW(
+        INVALID_HANDLE_VALUE,
+        NULL,
+        PAGE_READWRITE,
+        0,
+        OBJECT_NAME_BUFFER_SIZE,
+        L"Global\\OFGal_Engine_LevelTreeList_DetailViewer_ObjectSharedMem");
+    if (!m_hObjectSharedMem) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create object shared memory.\n");
+        return false;
+    }
+
+    m_pObjectSharedView = MapViewOfFile(
+        m_hObjectSharedMem,
+        FILE_MAP_ALL_ACCESS,
+        0, 0,
+        OBJECT_NAME_BUFFER_SIZE);
+    if (!m_pObjectSharedView) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to map object shared memory view.\n");
+        return false;
+    }
+
+    // 初始清空
+    ZeroMemory(m_pPathSharedView, SHARED_PATH_BUFFER_SIZE);
+    ZeroMemory(m_pObjectSharedView, OBJECT_NAME_BUFFER_SIZE);
+
+    return true;
+}
+
+bool LevelTreeList::StartDetailViewer() {
+    std::wstring cmdLine =
+        L"cmd.exe /c \"" + exePath_DetailViewer + L"\"";
+
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+
+    BOOL success = CreateProcessW(
+        NULL,
+        &cmdLine[0],
+        NULL, NULL,
+        FALSE,
+        CREATE_NEW_CONSOLE,
+        NULL, NULL,
+        &si, &pi);
+
+    if (success) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        OutputDebugStringW(L"[LevelTreeList] DetailViewer started.\n");
+    }
+    else {
+        WCHAR buf[128];
+        swprintf_s(buf, L"[LevelTreeList] Failed to start DetailViewer, error: %lu\n", GetLastError());
+        OutputDebugStringW(buf);
+    }
+    return success != 0;
 }
 
 void LevelTreeList::RecursiveBuild(const std::map<std::string, ObjectData*>& children,
@@ -241,6 +369,34 @@ void LevelTreeList::CloseIPC() {
         CloseHandle(m_hEvent);
         m_hEvent = NULL;
     }
+    if (m_pPathSharedView) {
+        UnmapViewOfFile(m_pPathSharedView);
+        m_pPathSharedView = nullptr;
+    }
+    if (m_hPathSharedMem) {
+        CloseHandle(m_hPathSharedMem);
+        m_hPathSharedMem = NULL;
+    }
+    if (m_hPathUpdateEvent) {
+        CloseHandle(m_hPathUpdateEvent);
+        m_hPathUpdateEvent = NULL;
+    }
+    if (m_hDataChangedEvent) {
+        CloseHandle(m_hDataChangedEvent);
+        m_hDataChangedEvent = NULL;
+    }
+    if (m_pObjectSharedView) {
+        UnmapViewOfFile(m_pObjectSharedView);
+        m_pObjectSharedView = nullptr;
+    }
+    if (m_hObjectSharedMem) {
+        CloseHandle(m_hObjectSharedMem);
+        m_hObjectSharedMem = NULL;
+    }
+    if (m_hObjectChangedEvent) {
+        CloseHandle(m_hObjectChangedEvent);
+        m_hObjectChangedEvent = NULL;
+    }
 }
 
 bool LevelTreeList::Initialize() {
@@ -265,7 +421,13 @@ bool LevelTreeList::Initialize() {
     m_inputCollector->AddBinding({ 'J', Modifier::None, KeyCode::J, true });
     m_inputCollector->AddBinding({ 'K', Modifier::None, KeyCode::K, true });
     OutputDebugStringW(L"[LevelTreeList] Input bindings configured. Entering main loop...\n");
+
+    if (!CreateDetailViewerIPC()) {
+        OutputDebugStringW(L"[LevelTreeList] Failed to create DetailViewer IPC.\n");
+    }
+
     m_running = true;
+    StartDetailViewer();
     return true;
 }
 
@@ -285,8 +447,27 @@ void LevelTreeList::HandleOpenLevelEvent() {
         LevelData level = ReadLevelData(utf8Path);
         m_currentLevel = std::make_unique<LevelData>(std::move(level));
         m_currentLevelPath = utf8Path;
+        // 同时保存宽字符版本
+        m_currentLevelPathW = Utf8ToWstr(utf8Path);
+
         std::string countMsg = "Level loaded successfully. Object count: " + std::to_string(m_currentLevel->objects.size()) + "\n";
         OutputDebugStringA(countMsg.c_str());
+
+        // 复制路径到共享内存并通知 DetailViewer
+        if (m_pPathSharedView) {
+            wcsncpy_s(
+                static_cast<WCHAR*>(m_pPathSharedView),
+                SHARED_PATH_BUFFER_SIZE / sizeof(WCHAR),
+                m_currentLevelPathW.c_str(),
+                m_currentLevelPathW.length());
+            // 确保末尾 0
+            static_cast<WCHAR*>(m_pPathSharedView)[m_currentLevelPathW.length()] = L'\0';
+        }
+        if (m_hPathUpdateEvent) {
+            SetEvent(m_hPathUpdateEvent);
+            OutputDebugStringW(L"[LevelTreeList] PathUpdate event signaled.\n");
+        }
+
         BuildDisplayList();
         m_selectedIndex = 0;
         m_needRender = true;
@@ -298,6 +479,35 @@ void LevelTreeList::HandleOpenLevelEvent() {
     }
     if (m_hEvent) {
         ResetEvent(m_hEvent);
+    }
+}
+
+void LevelTreeList::HandleDataChangedEvent() {
+    // 交互模式中暂不重新加载，避免状态丢失（事件已自动重置，DetailViewer 后续保存会再次触发）
+    if (m_inInteractiveMode) {
+        OutputDebugStringW(L"[LevelTreeList] DataChanged event ignored (interactive mode).\n");
+        return;
+    }
+
+    if (!m_currentLevel || m_currentLevelPath.empty()) {
+        OutputDebugStringW(L"[LevelTreeList] DataChanged event: no level loaded.\n");
+        return;
+    }
+
+    OutputDebugStringW(L"[LevelTreeList] DataChanged event triggered, reloading level...\n");
+    try {
+        LevelData level = ReadLevelData(m_currentLevelPath);
+        m_currentLevel = std::make_unique<LevelData>(std::move(level));
+        BuildDisplayList();
+        if (m_selectedIndex >= static_cast<int>(m_displayNodes.size()))
+            m_selectedIndex = static_cast<int>(m_displayNodes.size()) - 1;
+        if (m_selectedIndex < 0) m_selectedIndex = 0;
+        RenderTree();
+        OutputDebugStringW(L"[LevelTreeList] Level reloaded after DataChanged.\n");
+    }
+    catch (const std::exception& e) {
+        std::string errMsg = "Failed to reload level: " + std::string(e.what()) + "\n";
+        OutputDebugStringA(errMsg.c_str());
     }
 }
 
@@ -438,7 +648,10 @@ void LevelTreeList::AddObjectInteractive() {
 
     try {
         addTransform = ask("TransformComponent");
-        addPicture = ask("PictureComponent");
+        if(addTransform)
+            addPicture = ask("PictureComponent");
+        else
+            addPicture = false;
         addTextblock = ask("TextblockComponent");
         addTrigger = ask("TriggerAreaComponent");
         addBlueprint = ask("BlueprintComponent");
@@ -591,6 +804,23 @@ void LevelTreeList::ProcessInputEvents() {
 
     if (selectionChanged) {
         RenderTree();
+
+        if (m_selectedIndex >= 0 && m_selectedIndex < static_cast<int>(m_displayNodes.size())) {
+            const auto& node = m_displayNodes[m_selectedIndex];
+            if (node.object != nullptr && m_pObjectSharedView) {
+                std::wstring wname = Utf8ToWstr(node.name);
+                wcsncpy_s(
+                    static_cast<WCHAR*>(m_pObjectSharedView),
+                    OBJECT_NAME_BUFFER_SIZE / sizeof(WCHAR),
+                    wname.c_str(),
+                    wname.length());
+                static_cast<WCHAR*>(m_pObjectSharedView)[wname.length()] = L'\0';
+
+                if (m_hObjectChangedEvent) {
+                    SetEvent(m_hObjectChangedEvent);
+                }
+            }
+        }
     }
 }
 
@@ -600,24 +830,31 @@ void LevelTreeList::Run() {
         OutputDebugStringW(L"[LevelTreeList] ERROR: Event handle is invalid!\n");
         return;
     }
+
+    HANDLE handles[2] = { m_hEvent, m_hDataChangedEvent };
+    DWORD handleCount = (m_hDataChangedEvent != NULL) ? 2 : 1;
+
     while (m_running) {
-        DWORD waitResult = WaitForSingleObject(m_hEvent, 0);
+        DWORD waitResult = WaitForMultipleObjects(handleCount, handles, FALSE, 0);
         if (waitResult == WAIT_OBJECT_0) {
-            OutputDebugStringW(L"[LevelTreeList] Event signaled!\n");
+            OutputDebugStringW(L"[LevelTreeList] Main OpenLevel event signaled!\n");
             HandleOpenLevelEvent();
+        }
+        else if (waitResult == WAIT_OBJECT_0 + 1) {
+            HandleDataChangedEvent();
         }
         else if (waitResult == WAIT_TIMEOUT) {
             // normal
         }
         else {
             WCHAR errBuf[128];
-            swprintf_s(errBuf, L"[LevelTreeList] WaitForSingleObject error: %lu, handle: %p\n", GetLastError(), m_hEvent);
+            swprintf_s(errBuf, L"[LevelTreeList] WaitForMultipleObjects error: %lu\n", GetLastError());
+
             OutputDebugStringW(errBuf);
             m_running = false;
             break;
         }
 
-        // 交互模式下不收集新输入事件
         if (!m_inInteractiveMode) {
             m_inputCollector->update();
         }

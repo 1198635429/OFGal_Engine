@@ -8,7 +8,7 @@
 #include <thread>
 #include <memory>
 #include <vector>
-#include <functional>   // 新增：用于 std::function
+#include <functional>
 
 #include "SharedTypes.h"
 #include "InputSystem.h"
@@ -29,15 +29,16 @@ private:
     bool OpenIPC();
     void CloseIPC();
     void HandleOpenLevelEvent();
+    void HandleDataChangedEvent();
 
     void ProcessInputEvents();
 
     struct DisplayNode {
-        std::string displayText;      // 完整显示行（含前缀和名称）
-        std::string prefix;           // 树形前缀（用于颜色控制）
-        std::string name;             // 对象/场景名
-        ObjectData* object;           // 对应的对象指针（场景时为 nullptr）
-        int depth;                    // 深度（0 为场景）
+        std::string displayText;
+        std::string prefix;
+        std::string name;
+        ObjectData* object;
+        int depth;
     };
 
     void BuildDisplayList();
@@ -53,29 +54,38 @@ private:
     void DeleteSelectedObject();
 
     void SaveCurrentLevel();
-
-    // 删除对象（仅需对象指针）
     void RemoveObjectFromParent(ObjectData* obj);
-
-    // 辅助输入函数：清除 cin 缓冲区
     void ClearInputStream();
-
-    // 辅助函数：询问单个组件
     bool AskComponent(const std::string& componentName);
+
+    bool CreateDetailViewerIPC();
+    bool StartDetailViewer();
 
     // --- 成员变量 ---
     bool m_running;
 
-    HANDLE m_hEvent;
-    HANDLE m_hMapFile;
-    LPVOID m_pView;
+    HANDLE m_hEvent;               // 原有：主程序 -> 打开关卡事件
+    HANDLE m_hMapFile;             // 原有：主程序共享内存句柄
+    LPVOID m_pView;                // 原有：主程序共享内存视图
+
+    HANDLE m_hPathUpdateEvent;     // 信号：路径已更新
+    HANDLE m_hDataChangedEvent;    // 信号：数据已变更（需重新加载）
+    HANDLE m_hPathSharedMem;       // 共享内存句柄（存放路径）
+    LPVOID m_pPathSharedView;      // 共享内存视图
+
+    HANDLE m_hObjectChangedEvent;   // 事件：选中对象已更改
+    HANDLE m_hObjectSharedMem;      // 共享内存句柄（存放对象名）
+    LPVOID m_pObjectSharedView;     // 共享内存视图
 
     InputSystem* m_inputSystem;
     std::unique_ptr<InputCollector> m_inputCollector;
     std::chrono::milliseconds m_loopInterval;
 
-    std::unique_ptr<LevelData> m_currentLevel;   // 自动管理内存
+    std::unique_ptr<LevelData> m_currentLevel;
     std::string m_currentLevelPath;
+    std::wstring m_currentLevelPathW; // 宽字符路径，共享内存用
+
+    std::wstring exePath_DetailViewer = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\DetailViewer.exe";
 
     std::vector<DisplayNode> m_displayNodes;
     int m_selectedIndex;

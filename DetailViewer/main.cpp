@@ -1,7 +1,8 @@
-#include <iostream>
+// Copyright 2026 Nagato-Yuki-708. All Rights Reserved.
+#include "DetailViewer.h"
 
 int main() {
-	std::cout << "123" << std::endl;
-
-	return 0;
+    DetailViewer viewer;
+    viewer.Run();  // 进入轮询循环，不会主动返回
+    return 0;
 }
