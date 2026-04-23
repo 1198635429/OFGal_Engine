@@ -133,7 +133,7 @@ void LevelTreeList::RenderTree() {
         std::cout << "\033[37mNo level loaded.\033[0m" << std::endl;
         return;
     }
-    std::cout << "\033[36mA/D: select previous/next  J: add object  K: delete object\033[0m\n" << std::endl;
+    std::cout << "\033[36mW/Up: select previous  S/Down: select next  J: add object  K: delete object\033[0m\n" << std::endl;
     for (size_t i = 0; i < m_displayNodes.size(); ++i) {
         const auto& node = m_displayNodes[i];
         if (static_cast<int>(i) == m_selectedIndex) {
@@ -179,10 +179,10 @@ void LevelTreeList::SetWindowSizeAndPosition() {
             }
         }
         SetWindowPos(hwndConsole, nullptr,
-            static_cast<int>(2040.0f * scaleX),
-            static_cast<int>(150.0f * scaleY),
-            static_cast<int>(520.0f * scaleX),
-            static_cast<int>(500.0f * scaleY),
+            static_cast<int>(0.0f),
+            static_cast<int>(0.0f),
+            static_cast<int>(430.0f * scaleX),
+            static_cast<int>(1010.0f * scaleY),
             SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
@@ -258,8 +258,10 @@ bool LevelTreeList::Initialize() {
     m_inputSystem->SetGlobalCapture(false);
 
     m_inputCollector = std::make_unique<InputCollector>(m_inputSystem);
-    m_inputCollector->AddBinding({ 'A', Modifier::None, KeyCode::A, true });
-    m_inputCollector->AddBinding({ 'D', Modifier::None, KeyCode::D, true });
+    m_inputCollector->AddBinding({ 'W',         Modifier::None, KeyCode::W,   true });
+    m_inputCollector->AddBinding({ VK_UP,       Modifier::None, KeyCode::Up,  true });
+    m_inputCollector->AddBinding({ 'S',         Modifier::None, KeyCode::S,    true });
+    m_inputCollector->AddBinding({ VK_DOWN,     Modifier::None, KeyCode::Down, true });
     m_inputCollector->AddBinding({ 'J', Modifier::None, KeyCode::J, true });
     m_inputCollector->AddBinding({ 'K', Modifier::None, KeyCode::K, true });
     OutputDebugStringW(L"[LevelTreeList] Input bindings configured. Entering main loop...\n");
@@ -551,7 +553,7 @@ void LevelTreeList::DeleteSelectedObject() {
 }
 
 void LevelTreeList::ProcessInputEvents() {
-    if (m_inInteractiveMode) return;  // 交互模式下忽略所有输入事件
+    if (m_inInteractiveMode) return;
 
     const auto& events = m_inputSystem->getEvents();
     bool selectionChanged = false;
@@ -559,13 +561,15 @@ void LevelTreeList::ProcessInputEvents() {
     for (const auto& ev : events) {
         if (ev.type == InputType::KeyDown) {
             switch (ev.key) {
-            case KeyCode::A:
+            case KeyCode::W:   // W 键
+            case KeyCode::Up:  // 上箭头
                 if (m_selectedIndex > 0) {
                     --m_selectedIndex;
                     selectionChanged = true;
                 }
                 break;
-            case KeyCode::D:
+            case KeyCode::S:    // S 键
+            case KeyCode::Down: // 下箭头
                 if (m_selectedIndex < static_cast<int>(m_displayNodes.size()) - 1) {
                     ++m_selectedIndex;
                     selectionChanged = true;
