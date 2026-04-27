@@ -141,6 +141,7 @@
     <ClCompile Include="ProjectStructureGetter.cpp" />
     <ClCompile Include="RenderingSystem.cpp" />
     <ClCompile Include="SoundSystem.cpp" />
+    <ClCompile Include="Value.cpp" />
     <ClCompile Include="WindowsSystem.cpp" />
     <ClCompile Include="_EventBus.cpp" />
   </ItemGroup>

@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <windows.h>
 #include <cuda_runtime.h>
-
 /*
 =================================================
 文件系统结构体定义
@@ -137,6 +136,33 @@ struct LevelData {
 */
 #ifndef __CUDACC__  // 以下内容仅在主机编译时可见
 // 引脚定义
+
+enum ValueType {
+	NONE,
+	INT,
+	FLOAT,
+	BOOL,
+	STRING
+};
+struct Value {
+	ValueType type = ValueType::NONE;
+
+	int i;
+	float f;
+	bool b;
+	std::string s;
+	//以下是构造函数
+	static Value makeInt(int v);
+	static Value makeFloat(float v);
+	static Value makeBool(bool b);
+	static Value makeString(std::string s);
+};
+struct PinValue {
+	bool hasValue = false;
+	Value value;
+};
+Value calcBinary(const Value& a, const Value& b, char op);
+
 struct Pin {
 	std::string name;
 	std::string io;          // "I" 或 "O"

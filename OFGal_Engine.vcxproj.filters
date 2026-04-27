@@ -105,6 +105,9 @@
     <ClCompile Include="WindowsSystem.cpp">
       <Filter>Source Files\WindowsSystem</Filter>
     </ClCompile>
+    <ClCompile Include="Value.cpp">
+      <Filter>Source Files\GameVM</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h">
