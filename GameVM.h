@@ -47,14 +47,13 @@ public:
 };
 class BeginPlay_Node :public NODE {
 public:
-	void fun_for_VM() {
+	void func_for_VM() {
 		if (nextNode) {
 			nextNode->func_for_VM();
 		}
 	}
 
 };
-
 class PlayPerNMsNode :public NODE {  //一种另类的开始节点
 	int intervalMs = 1000;  //此处定义的是间隔的时间
 	std::atomic<bool> running = false;
@@ -64,7 +63,6 @@ class PlayPerNMsNode :public NODE {  //一种另类的开始节点
 		start();
 	}
 };
-
 class PlayWhenKeyNode : public NODE, public InputListener {
 public:
 	KeyCode targetKey;
@@ -87,7 +85,6 @@ public:
 		}
 	}
 };
-
 class Exit : public NODE {
 public:
 	void func_for_VM() {
@@ -95,7 +92,6 @@ public:
 	}
 
 };
-
 class SetTransforNode : public NODE {
 public:
 	ObjectData* obj = nullptr;

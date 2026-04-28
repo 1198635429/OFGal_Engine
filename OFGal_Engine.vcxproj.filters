@@ -108,6 +108,9 @@
     <ClCompile Include="Value.cpp">
       <Filter>Source Files\GameVM</Filter>
     </ClCompile>
+    <ClCompile Include="BlueprintCompiler.cpp">
+      <Filter>Source Files\GameVM</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BMP_Reader.h">
@@ -166,6 +169,9 @@
     </ClInclude>
     <ClInclude Include="WindowsSystem.h">
       <Filter>Header Files\WindowsSystem</Filter>
+    </ClInclude>
+    <ClInclude Include="BlueprintCompiler.h">
+      <Filter>Header Files\GameVM</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

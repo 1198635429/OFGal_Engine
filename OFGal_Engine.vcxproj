@@ -129,6 +129,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BlueprintCompiler.cpp" />
     <ClCompile Include="BMP_Reader.cpp" />
     <ClCompile Include="cmdDrawer.cpp" />
     <ClCompile Include="FileSystem.cpp" />
@@ -156,6 +157,7 @@
     <None Include="TestLevel1.level" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BlueprintCompiler.h" />
     <ClInclude Include="BMP_Reader.h" />
     <ClInclude Include="cmdDrawer.h" />
     <ClInclude Include="FileSystem.h" />
