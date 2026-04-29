@@ -7,7 +7,6 @@
 #include"InputCollector.h"
 #include "InputSystem.h"
 #include "InputEvent.h"
-
 class NODE { //这是父类
 public:
 	NODE* lastNode = nullptr;
@@ -24,11 +23,8 @@ public:
 	void func_for_VM() {
 		Value a = InData[0] ? *InData[0] : Value();
 		Value b = InData[1] ? *InData[1] : Value();
-		Value result = compute(a, b),
+		Value result = compute(a, b);
 			OutData[0] = result;
-		if (nextNode) {
-			nextNode->func_for_VM();
-		}
 	}
 };
 class Node_ADD :public BinaryOpNode {
@@ -50,9 +46,7 @@ public:
 class BeginPlay_Node :public NODE {
 public:
 	void func_for_VM() {
-		if (nextNode) {
-			nextNode->func_for_VM();
-		}
+		
 	}
 
 };
@@ -106,3 +100,21 @@ public:
 	NODE* nextNode = nullptr;
 	void func_for_VM();
 };
+//以下是执行系统的定义
+
+class ExecutionContext {   //执行引擎,起到一个记录上下文的作用
+public:
+	NODE* current = nullptr;
+	bool running = true;
+	NODE* lastExecuted = nullptr;  //在调试的时候使用
+};
+
+inline void RunVM(ExecutionContext& ctx) {
+	while (ctx.current && ctx.running) {
+		NODE* node = ctx.current;
+		ctx.current = node->nextNode;
+		ctx.lastExecuted = node;
+		node->func_for_VM();
+	}
+}
+

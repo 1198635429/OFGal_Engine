@@ -85,10 +85,12 @@ void PlayPerNMsNode::start() {
 	running = true;
 	std::thread([this]() {
 		while (running) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));//节点睡眠的时间
-			if (nextNode) {
-				nextNode->func_for_VM();
-			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+
+			ExecutionContext ctx;
+			ctx.current = this->nextNode;
+
+			RunVM(ctx);   // 用引擎执行
 		}
 		}).detach();
 }
@@ -107,5 +109,4 @@ void SetTransforNode::func_for_VM() {
 
 	if (in_scale_x) tf.Scale.x = in_scale_x->f;
 	if (in_scale_y) tf.Scale.y = in_scale_y->f;
-	if (nextNode) nextNode->func_for_VM();
 }

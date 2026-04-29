@@ -95,8 +95,11 @@ void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {  //Êý¾ÝÁ÷°ó¶
 			}
 		}
 	}
-	
-
-
 }
-
+void BlueprintCompiler::Run() {
+	for (auto* entry : entryNodes) {
+		ExecutionContext ctx;
+		ctx.current = entry;
+		RunVM(ctx);
+	}
+}
