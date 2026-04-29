@@ -12,7 +12,7 @@ void BlueprintCompiler::Compile(const BlueprintData& data) {  //ÕâÊÇÀ¶Í¼±à¼­Æ÷µÄ
 	BuildExecLinks(data);
 	BuildDataLinks(data);
 	for (auto& n : data.nodes) {
-		if (n.type == "BegeinPlay") {
+		if (n.type == "BeginPlay") {
 			entryNodes.push_back(nodeMap[n.id]);
 		}
 	}
@@ -49,12 +49,15 @@ void BlueprintCompiler::BuildExecLinks(const BlueprintData& data) {
 
 
 
-void BlueprintCompiler::InitNodeData(const BlueprintData& data) {
+void BlueprintCompiler::InitNodeData(const BlueprintData& data) {     //Êý¾Ý¿Õ¼ä³õÊ¼»¯
 	for (auto& n : data.nodes) {
 		NODE* node = nodeMap[n.id];
 		if (auto* bin = dynamic_cast<BinaryOpNode*>(node)) {  //Èç¹ûÊÇÔËËã½Úµã£¬ÄÇÃ´¾Í¸øËûÃÇµÄÊäÈëÊä³öÊý¾Ý·ÖÅä¿Õ¼ä
 			bin->InData.resize(2);
 			bin->OutData.resize(1);
+			for (int i = 0; i < 2; i++) {
+				bin->InData[i] = nullptr;
+			}
 		}
 		if (auto* st = dynamic_cast<SetTransforNode*>(node)) {
 		
@@ -77,24 +80,18 @@ void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {  //Êý¾ÝÁ÷°ó¶
 		auto* dstBin = dynamic_cast<BinaryOpNode*>(dst);
 		if (srcBin && dstBin) {
 			int dstIndex = (link.targetPin == "A") ? 0 : 1;
-			dstBin->InData[dstIndex] = srcBin->OutData[0];
+			dstBin->InData[dstIndex] = &srcBin->OutData[0];
 		}
 		auto* st = dynamic_cast<SetTransforNode*>(dst);
 		if (srcBin && st) {
-
-			Value v = srcBin->OutData[0];
-
 			if (link.targetPin == "Location.x") {
-				st->in_loc_x.value = v;
-				st->in_loc_x.hasValue = true;
+				st->in_loc_x = &srcBin->OutData[0];
 			}
 			if (link.targetPin == "Location.y") {
-				st->in_loc_y.value = v;
-				st->in_loc_y.hasValue = true;
+				st->in_loc_y = &srcBin->OutData[0];
 			}
 			if (link.targetPin == "Location.z") {
-				st->in_loc_z.value = v;
-				st->in_loc_z.hasValue = true;
+				st->in_loc_z = &srcBin->OutData[0];
 			}
 		}
 	}

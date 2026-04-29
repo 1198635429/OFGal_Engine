@@ -99,13 +99,13 @@ void PlayPerNMsNode::stop() {
 void SetTransforNode::func_for_VM() {
 	if (!obj->Transform.has_value()) return;
 	auto& tf = obj->Transform.value();
-	if (in_loc_x.hasValue) tf.Location.x = in_loc_x.value.f;
-	if (in_loc_y.hasValue) tf.Location.y = in_loc_y.value.f;
-	if (in_loc_z.hasValue) tf.Location.z = in_loc_z.value.i;
+	if (in_loc_x) tf.Location.x = in_loc_x->f;
+	if (in_loc_y) tf.Location.y = in_loc_y->f;
+	if (in_loc_z) tf.Location.z = in_loc_z->i;
 
-	if (in_rotation.hasValue) tf.Rotation.r = in_rotation.value.f;
+	if (in_rotation) tf.Rotation.r = in_rotation->f;
 
-	if (in_scale_x.hasValue) tf.Scale.x = in_scale_x.value.f;
-	if (in_scale_y.hasValue) tf.Scale.y = in_scale_y.value.f;
-
+	if (in_scale_x) tf.Scale.x = in_scale_x->f;
+	if (in_scale_y) tf.Scale.y = in_scale_y->f;
+	if (nextNode) nextNode->func_for_VM();
 }

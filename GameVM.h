@@ -18,12 +18,14 @@ public:
 };
 class BinaryOpNode :public NODE {
 public:
-	std::vector<Value>InData;
+	std::vector<Value*>InData;
 	std::vector<Value> OutData;
 	virtual Value compute(const Value& a, const Value& b) = 0;
 	void func_for_VM() {
-		Value result = compute(InData[0], InData[1]);
-		OutData[0] = result;
+		Value a = InData[0] ? *InData[0] : Value();
+		Value b = InData[1] ? *InData[1] : Value();
+		Value result = compute(a, b),
+			OutData[0] = result;
 		if (nextNode) {
 			nextNode->func_for_VM();
 		}
@@ -95,12 +97,12 @@ public:
 class SetTransforNode : public NODE {
 public:
 	ObjectData* obj = nullptr;
-	PinValue in_loc_x;
-	PinValue in_loc_y;
-	PinValue in_loc_z;
-	PinValue in_rotation;
-	PinValue in_scale_x;
-	PinValue in_scale_y;
+	Value* in_loc_x = nullptr;
+	Value* in_loc_y = nullptr;
+	Value* in_loc_z = nullptr;
+	Value* in_rotation = nullptr;
+	Value* in_scale_x = nullptr;
+	Value* in_scale_y = nullptr;
 	NODE* nextNode = nullptr;
 	void func_for_VM();
 };
