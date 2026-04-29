@@ -22,6 +22,41 @@ Value calcBinary(const Value& a, const Value& b, char op) {
 	case '/': return Value::makeFloat(y != 0 ? x / y : 0.0f);
 	}
 }
+
+Value Node_Equal::compute(const Value& a, const Value& b) {
+	if (a.type == ValueType::INT && b.type == ValueType::INT) {
+		return Value::makeBool(a.i == b.i);
+	}
+	float fa = (a.type == ValueType::INT) ? a.i : a.f;
+	float fb = (b.type == ValueType::INT) ? b.i : b.f;
+	return Value::makeBool(fa == fb);
+}
+Value Node_Greater::compute(const Value& a, const Value& b) {
+
+	// int > int
+	if (a.type == ValueType::INT && b.type == ValueType::INT) {
+		return Value::makeBool(a.i > b.i);
+	}
+
+	// 转 float 比较
+	float fa = (a.type == ValueType::INT) ? a.i : a.f;
+	float fb = (b.type == ValueType::INT) ? b.i : b.f;
+
+	return Value::makeBool(fa > fb);
+}
+Value Node_Less::compute(const Value& a, const Value& b) {
+
+	// int < int
+	if (a.type == ValueType::INT && b.type == ValueType::INT) {
+		return Value::makeBool(a.i < b.i);
+	}
+
+	float fa = (a.type == ValueType::INT) ? a.i : a.f;
+	float fb = (b.type == ValueType::INT) ? b.i : b.f;
+
+	return Value::makeBool(fa < fb);
+}
+
 Value Node_ADD::compute(const Value& a, const Value& b) {
 
 	// int + int

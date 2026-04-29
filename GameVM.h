@@ -46,6 +46,18 @@ public:
 			OutData[0] = result;
 	}
 };
+class Node_Equal : public BinaryOpNode {    //这个是等号的比较节点
+public:
+	Value compute(const Value& a, const Value& b);
+};
+class Node_Greater : public BinaryOpNode {
+public:
+	Value compute(const Value& a, const Value& b);
+};
+class Node_Less : public BinaryOpNode {
+public:
+	Value compute(const Value& a, const Value& b);
+};
 class Node_ADD :public BinaryOpNode {
 public:
 	Value compute(const Value& a, const Value& b);
@@ -132,6 +144,9 @@ inline void RunVM(ExecutionContext& ctx) {
 	while (ctx.current && ctx.running) {
 		NODE* node = ctx.current;
 		node->func_for_VM();
+		if (!node->nextNode) {
+			ctx.running = false;
+		}
 		ctx.current = node->nextNode;
 		ctx.lastExecuted = node;
 	}
