@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <windows.h>
 #include <cuda_runtime.h>
+
+using namespace std;
+
 /*
 =================================================
 文件系统结构体定义
@@ -131,31 +134,76 @@ struct LevelData {
 
 /*
 =================================================
+渲染基础结构体（需在 Value 之前，因为 Value::frame 成员依赖 Frame 类型）
+=================================================
+*/
+struct StdPixel {
+	unsigned char red = 0;
+	unsigned char green = 0;
+	unsigned char blue = 0;
+};
+struct Frame {
+	int width = 0;
+	int height = 0;
+	std::vector<StdPixel> pixels;
+};
+
+/*
+=================================================
 蓝图系统结构体定义
 =================================================
 */
 #ifndef __CUDACC__  // 以下内容仅在主机编译时可见
 // 引脚定义
 
-enum ValueType {
-	NONE,
+enum class ValueType {
+	NONE = 0,
 	INT,
 	FLOAT,
 	BOOL,
-	STRING
+	STRING,
+	FRAME
 };
 struct Value {
 	ValueType type = ValueType::NONE;
-
-	int i;
-	float f;
-	bool b;
+	int         i = 0;
+	float       f = 0.0f;
+	bool        b = false;
 	std::string s;
-	//以下是构造函数
+	Frame       frame;
+
+	// —— 工厂方法（声明，定义在 Value.cpp）——
+	static Value makeNone();
 	static Value makeInt(int v);
 	static Value makeFloat(float v);
-	static Value makeBool(bool b);
-	static Value makeString(std::string s);
+	static Value makeBool(bool v);
+	static Value makeString(const std::string& s);
+	static Value makeFrame(const Frame& v);
+
+	// —— 类型查询 ——
+	bool isNone()   const { return type == ValueType::NONE; }
+	bool isInt()    const { return type == ValueType::INT; }
+	bool isFloat()  const { return type == ValueType::FLOAT; }
+	bool isBool()   const { return type == ValueType::BOOL; }
+	bool isString() const { return type == ValueType::STRING; }
+	bool isFrame()  const { return type == ValueType::FRAME; }
+
+	// —— 安全取值（类型不匹配时返回默认值，不崩溃）——
+	int asInt(int defaultVal = 0) const {
+		return (type == ValueType::INT) ? i : defaultVal;
+	}
+	float asFloat(float defaultVal = 0.0f) const {
+		return (type == ValueType::FLOAT) ? f : defaultVal;
+	}
+	bool asBool(bool defaultVal = false) const {
+		return (type == ValueType::BOOL) ? b : defaultVal;
+	}
+	const std::string& asString(const std::string& defaultVal = "") const {
+		return (type == ValueType::STRING) ? s : defaultVal;
+	}
+	const Frame& asFrame(const Frame& defaultVal = Frame{}) const {
+		return (type == ValueType::FRAME) ? frame : defaultVal;
+	}
 };
 struct PinValue {
 	bool hasValue = false;
@@ -220,19 +268,9 @@ struct BlueprintData {
 #endif
 /*
 =================================================
-渲染系统结构体定义
+渲染系统结构体定义（StdPixel / Frame 已移至 Value 之前）
 =================================================
 */
-struct StdPixel {
-	unsigned char red = 0;
-	unsigned char green = 0;
-	unsigned char blue = 0;
-};
-struct Frame {
-	int width;
-	int height;
-	std::vector<StdPixel> pixels;
-};
 struct Vector3D {		//一般用作列向量
 	float x = 0.0f, y = 0.0f, z = 1.0f;
 };

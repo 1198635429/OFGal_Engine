@@ -3,7 +3,7 @@
 #include "GameVM.h"
 
 Value calcBinary(const Value& a, const Value& b, char op) {
-	if (a.type == ValueType::INT && b.type == INT) {
+	if (a.type == ValueType::INT && b.type == ValueType::INT) {
 		int x = a.i;
 		int y = b.i;
 		switch (op) {
@@ -98,7 +98,7 @@ void PlayPerNMsNode::stop() {
 	running = false;
 }
 
-void SetTransforNode::func_for_VM() {
+void SetTransforNode::func_for_VM(ExecutionContext& ctx) {
 	if (!obj->Transform.has_value()) return;
 	auto& tf = obj->Transform.value();
 	if (in_loc_x) tf.Location.x = in_loc_x->f;
