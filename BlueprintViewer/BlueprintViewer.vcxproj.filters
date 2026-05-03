@@ -13,10 +13,54 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\readJson">
+      <UniqueIdentifier>{b3b7a3fe-c1bc-4dd9-98db-b9f82631a3d0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\input">
+      <UniqueIdentifier>{2c132b4b-261f-4b97-b54f-de8698569577}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\input">
+      <UniqueIdentifier>{6aa61a9d-464b-43ca-a2c7-2cabba99b3ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\readJson">
+      <UniqueIdentifier>{07ef3357-352b-4183-8b0c-ad86d408d2a1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="BlueprintViewer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Json_BPData_ReadWrite.cpp">
+      <Filter>Source Files\readJson</Filter>
+    </ClCompile>
+    <ClCompile Include="InputCollector.cpp">
+      <Filter>Source Files\input</Filter>
+    </ClCompile>
+    <ClCompile Include="InputSystem.cpp">
+      <Filter>Source Files\input</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SharedTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BlueprintViewer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Json_BPData_ReadWrite.h">
+      <Filter>Header Files\readJson</Filter>
+    </ClInclude>
+    <ClInclude Include="InputCollector.h">
+      <Filter>Header Files\input</Filter>
+    </ClInclude>
+    <ClInclude Include="InputSystem.h">
+      <Filter>Header Files\input</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

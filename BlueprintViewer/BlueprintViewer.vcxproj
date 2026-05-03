@@ -124,7 +124,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BlueprintViewer.cpp" />
+    <ClCompile Include="InputCollector.cpp" />
+    <ClCompile Include="InputSystem.cpp" />
+    <ClCompile Include="Json_BPData_ReadWrite.cpp" />
     <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BlueprintViewer.h" />
+    <ClInclude Include="Debug.h" />
+    <ClInclude Include="InputCollector.h" />
+    <ClInclude Include="InputSystem.h" />
+    <ClInclude Include="Json_BPData_ReadWrite.h" />
+    <ClInclude Include="SharedTypes.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
