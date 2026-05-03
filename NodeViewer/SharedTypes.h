@@ -10,7 +10,6 @@
 #include <math.h>
 #include <algorithm>
 #include <windows.h>
-#include <cuda_runtime.h>
 
 /*
 =================================================

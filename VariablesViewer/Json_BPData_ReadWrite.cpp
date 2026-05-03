@@ -3,7 +3,6 @@
 #include <fstream>
 #include <filesystem>
 #include <stdexcept>
-#include "FileSystem.h"
 
 namespace fs = std::filesystem;
 
@@ -147,10 +146,6 @@ bool WriteBPData(const std::string& filepath, const BlueprintData& data) {
 	}
 }
 
-bool FileSystem::WriteBPData(const std::string& filepath, const BlueprintData& data) {
-	return ::WriteBPData(filepath, data);
-}
-
 BlueprintData ReadBPData(const std::string& filepath) {
 	if (!fs::exists(filepath)) {
 		throw std::runtime_error("File not found: " + filepath);
@@ -162,8 +157,4 @@ BlueprintData ReadBPData(const std::string& filepath) {
 	json j;
 	file >> j;
 	return j.get<BlueprintData>();   // 自动调用 from_json
-}
-
-BlueprintData FileSystem::ReadBPData(const std::string& filepath) {
-	return ::ReadBPData(filepath);
 }
