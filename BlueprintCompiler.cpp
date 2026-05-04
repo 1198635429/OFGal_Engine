@@ -53,10 +53,37 @@ void BlueprintCompiler::BuildExecLinks(const BlueprintData& data) {
 		NODE* A = nodeMap[link.sourceNode];
 		NODE* B = nodeMap[link.targetNode];
 		if (!A || !B) continue;
-		if (link.sourcePin == "exec" || link.sourcePin == "then") {  //�����ͨ��ִ����
+		if (link.sourcePin == "exec" || link.sourcePin == "then") {  //这里进行基础的链接
 			A->nextNode = B;
 			B->lastNode = A;
 		}
+		auto* whileNode = dynamic_cast<While_Node*>(A);
+		if (whileNode && link.sourcePin == "OEXEC_Loop") {  //这里能够进行传导，将每一个节点都带上循环的属性
+			nodeTowhile[B] = whileNode;
+		}
+		bool updated = true;
+		while (updated) {
+			updated = false;
+			for (auto& link : data.links) {
+				NODE* A = nodeMap[link.sourceNode];
+				NODE* B = nodeMap[link.targetNode];
+				if (nodeTowhile.count(A) && !nodeTowhile.count(B)) {
+					nodeTowhile[B] = nodeTowhile[A];
+					updated = true;
+				}
+			}
+		}
+		for (auto& pair : nodeTowhile) {
+			NODE* node = pair.first;
+			While_Node* whileNode = pair.second;
+			if (auto* br = dynamic_cast<Break_Node*> (node)) {
+				br->loopNode = whileNode;
+			}
+			if (auto* cont = dynamic_cast<Continue_Node*>(node)) {
+				cont->loopNode = whileNode;
+			}
+		}
+
 		auto* branch = dynamic_cast<If_Node*>(A);
 		if (branch) {
 			if (link.sourcePin == "OEXEC_A") {

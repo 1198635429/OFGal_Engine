@@ -31,7 +31,7 @@ class NODE { //这是父类
 public:
 	NODE* lastNode = nullptr;
 	NODE* nextNode = nullptr;
-	NODE* loopNode = nullptr;
+	NODE* loopNode = nullptr;    //这里记录了循环的节点
 
 	// ★ 编译注意：所有节点统一签名 void func_for_VM(ExecutionContext& ctx)
 	//   RunVM 在调用前将 ctx.current 默认设为 node->nextNode
@@ -201,8 +201,13 @@ public:
 class Break_Node : public NODE {  // 蓝图节点类型："Break"
 public:
 	void func_for_VM(ExecutionContext& ctx) override {
-		// ctx.current 已被 RunVM 默认设为 nextNode（循环外）
-		// 无需额外操作
+		if (loopNode) {
+			auto* whileNode = dynamic_cast<While_Node*>(loopNode);
+			if (whileNode) {
+				ctx.current = whileNode->loopExitNode;// 跳到循环外，不用改执行流
+			}
+		}
+
 	}
 	// ★ 编译注意：
 	//   1. BuildExecLinks 需将此节点的 nextNode → While_Node 的 nextNode（循环外首节点）
@@ -463,7 +468,6 @@ inline void RunVM(ExecutionContext& ctx) {
 		}
 		ctx.current = node->nextNode;
 		ctx.lastExecuted = node;
-		node->func_for_VM(ctx);
 	}
 }
 

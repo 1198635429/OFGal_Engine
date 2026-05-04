@@ -145,16 +145,3 @@ void SetTransforNode::func_for_VM(ExecutionContext& ctx) {
 	if (in_scale_x) tf.Scale.x = in_scale_x->f;
 	if (in_scale_y) tf.Scale.y = in_scale_y->f;
 }
-
-void While_Node::func_for_VM() {
-	bool shouldRun = false;
-	if ( condition && condition->type == ValueType::BOOL) {
-		shouldRun = condition->b;
-	}
-	if (shouldRun) {
-		nextNode = loopBodyNode;
-	}
-	else {
-		nextNode = loopExitNode;
-	}
-}
