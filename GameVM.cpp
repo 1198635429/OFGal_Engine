@@ -133,7 +133,7 @@ void PlayPerNMsNode::stop() {
 	running = false;
 }
 
-void SetTransforNode::func_for_VM() {
+void SetTransforNode::func_for_VM(ExecutionContext& ctx) {
 	if (!obj->Transform.has_value()) return;
 	auto& tf = obj->Transform.value();
 	if (in_loc_x) tf.Location.x = in_loc_x->f;
