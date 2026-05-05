@@ -8,6 +8,7 @@
 #include"InputCollector.h"
 #include "InputSystem.h"
 #include "InputEvent.h"
+#include <unordered_map>
 
 // ============================================================
 // 前向声明
@@ -284,35 +285,121 @@ public:
 };
 
 // ============================================================
+// 蓝图变量上下文
+// ============================================================
+
+// 蓝图运行时变量表，由 BlueprintCompiler 在编译阶段从 BlueprintData::variables 初始化
+// 使用方式：编译器在 Run() 前创建实例，调用 setCurrent()，执行链中 GET_VAR / SET_VAR 即可访问
+class BlueprintContext {
+public:
+	std::unordered_map<std::string, Value> variables;
+
+	// 根据变量名查找，返回指针（不存在则 nullptr）
+	Value* getVariable(const std::string& name) {
+		auto it = variables.find(name);
+		return (it != variables.end()) ? &it->second : nullptr;
+	}
+
+	// 写入变量（不存在则创建，已存在则覆盖）
+	void setVariable(const std::string& name, const Value& val) {
+		variables[name] = val;  // 拷贝写入
+	}
+
+	// 获取当前线程的蓝图上下文（线程局部存储，PlayPerNMsNode 等多线程场景安全）
+	static BlueprintContext* current() {
+		return currentRef();
+	}
+
+	// 设置当前线程的蓝图上下文
+	static void setCurrent(BlueprintContext* ctx) {
+		currentRef() = ctx;
+	}
+
+private:
+	// 函数级 thread_local，头文件安全（无需 .cpp 定义）
+	static BlueprintContext*& currentRef() {
+		thread_local BlueprintContext* s_currentContext = nullptr;
+		return s_currentContext;
+	}
+};
+
+// ============================================================
 // 变量节点
 // ============================================================
 
-class GET_VAR : public NODE {  // 蓝图节点类型："GET_VAR"
+class GET_VAR : public NODE {  // 蓝图节点类型："GetVariable"
+	// 引脚结构（4个）：
+	//   IEXEC    (I, exec)      执行入口
+	//   VarToGet (I, string)    要获取的变量名，必定存在字面值，且必定是变量数组中的某个变量名
+	//   OEXEC    (O, exec)      执行出口
+	//   VarCopy  (O, int/float/string/bool)  变量值副本，类型必定与目标变量相同
 public:
-	Value* varName = nullptr;
-	Value outValue;
+	// —— 数据输入 ——
+	Value* VarToGet = nullptr;  // 变量名（必定存在字面值，编译期确定）
+
+	// —— 数据输出 ——
+	Value VarCopy;   // 变量值副本，初始为 NONE
+
 	void func_for_VM(ExecutionContext& ctx) override {
-		// TODO: 需要 BlueprintContext 集成后实现
-		// 从蓝图上下文的变量表中按 varName 查找，将值拷贝到 outValue
+		std::string name = (VarToGet && VarToGet->type == ValueType::STRING) ? VarToGet->s : "";
+
+		if (!name.empty()) {
+			auto* bpCtx = BlueprintContext::current();
+			if (bpCtx) {
+				Value* stored = bpCtx->getVariable(name);
+				if (stored) {
+					VarCopy = *stored;  // 拷贝值到输出引脚
+				} else {
+					VarCopy = Value();  // 变量不存在，输出 NONE
+				}
+			}
+		}
+		// 单出口节点，不修改 ctx.current，RunVM 自动走 nextNode
 	}
 	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="varName"→varName 指针绑定
-	//   2. InitNodeData 无需额外操作（outValue 是值类型，默认构造即可）
-	//   3. BuildDataLinks 中其他节点可能需要从此节点的 outValue 读取数据：
-	//      绑定方式为 dst->xxx = &GET_VAR->outValue（取地址）
+	//   1. BuildDataLinks 需处理 targetPin=="VarToGet"→VarToGet 指针绑定
+	//   2. VarToGet 必定存在字面值，InitNodeData 中需从 literal 解析为 Value::makeString(...)
+	//   3. BuildDataLinks 中其他节点可能需要从此节点的 VarCopy 读取数据：
+	//      绑定方式为 dst->xxx = &GET_VAR->VarCopy（取地址）
+	//   4. 节点工厂中类型字符串为 "GetVariable"
+	//   5. VarToGet 的字面值必定是 BlueprintData::variables 中的某个变量名
 };
 
-class SET_VAR : public NODE {  // 蓝图节点类型："SET_VAR"
+class SET_VAR : public NODE {  // 蓝图节点类型："SetVariable"
+	// 引脚结构（5个）：
+	//   IEXEC    (I, exec)      执行入口
+	//   VarToSet (I, string)    要设置的变量名，必定存在字面值，且必定是变量数组中的某个变量名
+	//   NewValue (I, int/float/string/bool)  新值，可能来自字面值或其他节点的Link
+	//   OEXEC    (O, exec)      执行出口
+	//   VarCopy  (O, int/float/string/bool)  设置后的变量值副本，类型必定与目标变量相同
 public:
-	Value* varName  = nullptr;
-	Value* inValue  = nullptr;
+	// —— 数据输入 ——
+	Value* VarToSet = nullptr;  // 变量名（必定存在字面值，编译期确定）
+	Value* NewValue = nullptr;  // 新值（可能来自字面值或其他节点的 Link）
+
+	// —— 数据输出 ——
+	Value VarCopy;   // 设置后的变量值副本
+
 	void func_for_VM(ExecutionContext& ctx) override {
-		// TODO: 需要 BlueprintContext 集成后实现
-		// 将 inValue 的值拷贝写入蓝图上下文变量表中 varName 对应的位置
+		std::string name = (VarToSet && VarToSet->type == ValueType::STRING) ? VarToSet->s : "";
+
+		if (!name.empty() && NewValue && NewValue->type != ValueType::NONE) {
+			auto* bpCtx = BlueprintContext::current();
+			if (bpCtx) {
+				bpCtx->setVariable(name, *NewValue);  // 拷贝写入变量表
+				VarCopy = *NewValue;                   // 输出设置后的值副本
+			}
+		}
+		// 单出口节点，不修改 ctx.current，RunVM 自动走 nextNode
 	}
 	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="varName"→varName, targetPin=="inValue"→inValue
-	//   2. 此节点无数据输出（只有执行流出口 nextNode）
+	//   1. BuildDataLinks 需处理 targetPin=="VarToSet"→VarToSet, targetPin=="NewValue"→NewValue
+	//   2. VarToSet 必定存在字面值，InitNodeData 中需从 literal 解析为 Value::makeString(...)
+	//   3. BuildDataLinks 中其他节点可能需要从此节点的 VarCopy 读取数据：
+	//      绑定方式为 dst->xxx = &SET_VAR->VarCopy（取地址）
+	//   4. 节点工厂中类型字符串为 "SetVariable"
+	//   5. VarToSet 的字面值必定是 BlueprintData::variables 中的某个变量名
+	//   6. NewValue 类型必定与目标变量类型相同
 };
 
 // ============================================================
@@ -462,10 +549,7 @@ public:
 inline void RunVM(ExecutionContext& ctx) {
 	while (ctx.current && ctx.running) {
 		NODE* node = ctx.current;
-		node->func_for_VM();
-		if (!node->nextNode) {
-			ctx.running = false;
-		}
+		
 		ctx.current = node->nextNode;
 		ctx.lastExecuted = node;
 		node->func_for_VM(ctx);

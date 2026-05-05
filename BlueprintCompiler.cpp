@@ -67,10 +67,10 @@ void BlueprintCompiler::BuildExecLinks(const BlueprintData& data) {
 		auto* branch = dynamic_cast<If_Node*>(A);
 		if (branch) {
 			if (link.sourcePin == "True") {
-				branch->trueNode = B;
+				branch->trueBranch = B;
 			}
 			if (link.sourcePin == "False") {
-				branch->falseNode = B;
+				branch->falseBranch = B;
 			}
 		}
 	}
