@@ -23,6 +23,7 @@ public:
 	NODE* current = nullptr;
 	bool running = true;
 	NODE* lastExecuted = nullptr;  //在调试的时候使用
+	std::unordered_map<std::string, Value> variables;  //蓝图上下文的变量表，GET_VAR/SET_VAR 节点通过这个表读写变量
 };
 
 // ============================================================
@@ -32,7 +33,7 @@ class NODE { //这是父类
 public:
 	NODE* lastNode = nullptr;
 	NODE* nextNode = nullptr;
-	NODE* loopNode = nullptr;
+	NODE* loopNode = nullptr;    //这里记录了循环的节点
 
 	// ★ 编译注意：所有节点统一签名 void func_for_VM(ExecutionContext& ctx)
 	//   RunVM 在调用前将 ctx.current 默认设为 node->nextNode
@@ -165,11 +166,11 @@ public:
 class If_Node : public NODE {  // 蓝图节点类型："If"
 public:
 	Value* condition = nullptr;
-	NODE* trueBranch = nullptr;
-	NODE* falseBranch = nullptr;
+	NODE* trueNode = nullptr;
+	NODE* falseNode = nullptr;
 	void func_for_VM(ExecutionContext& ctx) override {
 		bool cond = (condition && condition->type == ValueType::BOOL) ? condition->b : false;
-		ctx.current = cond ? trueBranch : falseBranch;
+		ctx.current = cond ? trueNode : falseNode;
 	}
 	// ★ 编译注意：
 	//   1. BuildExecLinks 需要处理 sourcePin=="true"→trueBranch, sourcePin=="false"→falseBranch
@@ -180,7 +181,8 @@ public:
 class While_Node : public NODE {  // 蓝图节点类型："While"
 public:
 	Value* condition = nullptr;
-	NODE* loopBody = nullptr;
+	NODE* loopBodyNode = nullptr;
+	NODE* loopExitNode = nullptr;
 	Value iterationCount;
 	int _count = 0;
 	void func_for_VM(ExecutionContext& ctx) override {
@@ -192,23 +194,22 @@ public:
 		} else {
 			iterationCount = Value::makeInt(_count);
 			_count++;
-			ctx.current = loopBody;
+			ctx.current = loopBodyNode;
 		}
 	}
-	// ★ 编译注意：
-	//   1. BuildExecLinks 需要处理 sourcePin=="loopBody"→loopBody
-	//   2. BuildExecLinks 中需将此节点的 loopNode 指向自身（回边到条件判断）
-	//   3. 循环体最后一个节点的 nextNode → 指向此节点（循环回边）
-	//   4. 循环体最后一个节点的 loopNode → 指向此节点（标记所属循环）
-	//   5. 识别"循环体最后一个节点"需要遍历 BlueprintData 的 links 结构
-	//   6. BuildDataLinks 需要处理 targetPin=="condition"→condition 指针绑定
+	
 };
 
 class Break_Node : public NODE {  // 蓝图节点类型："Break"
 public:
 	void func_for_VM(ExecutionContext& ctx) override {
-		// ctx.current 已被 RunVM 默认设为 nextNode（循环外）
-		// 无需额外操作
+		if (loopNode) {
+			auto* whileNode = dynamic_cast<While_Node*>(loopNode);
+			if (whileNode) {
+				ctx.current = whileNode->loopExitNode;// 跳到循环外，不用改执行流
+			}
+		}
+
 	}
 	// ★ 编译注意：
 	//   1. BuildExecLinks 需将此节点的 nextNode → While_Node 的 nextNode（循环外首节点）
@@ -326,84 +327,60 @@ private:
 // ============================================================
 // 变量节点
 // ============================================================
-
-class GET_VAR : public NODE {  // 蓝图节点类型："GetVariable"
-	// 引脚结构（4个）：
-	//   IEXEC    (I, exec)      执行入口
-	//   VarToGet (I, string)    要获取的变量名，必定存在字面值，且必定是变量数组中的某个变量名
-	//   OEXEC    (O, exec)      执行出口
-	//   VarCopy  (O, int/float/string/bool)  变量值副本，类型必定与目标变量相同
+class GET_VAR : public NODE {
 public:
-	// —— 数据输入 ——
-	Value* VarToGet = nullptr;  // 变量名（必定存在字面值，编译期确定）
-
-	// —— 数据输出 ——
-	Value VarCopy;   // 变量值副本，初始为 NONE
+	std::string varName;   // 编译期写死
+	Value outValue;
 
 	void func_for_VM(ExecutionContext& ctx) override {
-		std::string name = (VarToGet && VarToGet->type == ValueType::STRING) ? VarToGet->s : "";
 
-		if (!name.empty()) {
-			auto* bpCtx = BlueprintContext::current();
-			if (bpCtx) {
-				Value* stored = bpCtx->getVariable(name);
-				if (stored) {
-					VarCopy = *stored;  // 拷贝值到输出引脚
-				} else {
-					VarCopy = Value();  // 变量不存在，输出 NONE
-				}
-			}
+		if (varName.empty()) {
+			std::cout << "GET_VAR: empty name\n";
+			outValue = Value();
+			return;
 		}
-		// 单出口节点，不修改 ctx.current，RunVM 自动走 nextNode
+
+		auto it = ctx.variables.find(varName);
+		if (it != ctx.variables.end()) {
+			outValue = it->second;
+		}
+		else {
+			std::cout << "Variable not found: " << varName << "\n";
+			outValue = Value();
+		}
 	}
-	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="VarToGet"→VarToGet 指针绑定
-	//   2. VarToGet 必定存在字面值，InitNodeData 中需从 literal 解析为 Value::makeString(...)
-	//   3. BuildDataLinks 中其他节点可能需要从此节点的 VarCopy 读取数据：
-	//      绑定方式为 dst->xxx = &GET_VAR->VarCopy（取地址）
-	//   4. 节点工厂中类型字符串为 "GetVariable"
-	//   5. VarToGet 的字面值必定是 BlueprintData::variables 中的某个变量名
 };
-
-class SET_VAR : public NODE {  // 蓝图节点类型："SetVariable"
-	// 引脚结构（5个）：
-	//   IEXEC    (I, exec)      执行入口
-	//   VarToSet (I, string)    要设置的变量名，必定存在字面值，且必定是变量数组中的某个变量名
-	//   NewValue (I, int/float/string/bool)  新值，可能来自字面值或其他节点的Link
-	//   OEXEC    (O, exec)      执行出口
-	//   VarCopy  (O, int/float/string/bool)  设置后的变量值副本，类型必定与目标变量相同
+class SET_VAR : public NODE {
 public:
-	// —— 数据输入 ——
-	Value* VarToSet = nullptr;  // 变量名（必定存在字面值，编译期确定）
-	Value* NewValue = nullptr;  // 新值（可能来自字面值或其他节点的 Link）
+	std::string varName;     // 来自 VarToSet.literal
+	Value* inValue = nullptr; // Link 输入
+	Value literalValue;      // literal 输入（备用）
 
-	// —— 数据输出 ——
-	Value VarCopy;   // 设置后的变量值副本
+	Value outValue;          // VarCopy 输出
 
 	void func_for_VM(ExecutionContext& ctx) override {
-		std::string name = (VarToSet && VarToSet->type == ValueType::STRING) ? VarToSet->s : "";
 
-		if (!name.empty() && NewValue && NewValue->type != ValueType::NONE) {
-			auto* bpCtx = BlueprintContext::current();
-			if (bpCtx) {
-				bpCtx->setVariable(name, *NewValue);  // 拷贝写入变量表
-				VarCopy = *NewValue;                   // 输出设置后的值副本
-			}
+		if (varName.empty()) {
+			std::cout << "SET_VAR: empty name\n";
+			return;
 		}
-		// 单出口节点，不修改 ctx.current，RunVM 自动走 nextNode
-	}
-	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="VarToSet"→VarToSet, targetPin=="NewValue"→NewValue
-	//   2. VarToSet 必定存在字面值，InitNodeData 中需从 literal 解析为 Value::makeString(...)
-	//   3. BuildDataLinks 中其他节点可能需要从此节点的 VarCopy 读取数据：
-	//      绑定方式为 dst->xxx = &SET_VAR->VarCopy（取地址）
-	//   4. 节点工厂中类型字符串为 "SetVariable"
-	//   5. VarToSet 的字面值必定是 BlueprintData::variables 中的某个变量名
-	//   6. NewValue 类型必定与目标变量类型相同
-};
 
-// ============================================================
-// 渲染相关节点
+		Value finalValue;
+
+		// 优先使用数据流
+		if (inValue) {
+			finalValue = *inValue;
+		}
+		else {
+			finalValue = literalValue;
+		}
+
+		ctx.variables[varName] = finalValue;
+
+		// 输出副本
+		outValue = finalValue;
+	}
+};// 渲染相关节点
 // ============================================================
 
 class Render_Node : public NODE {  // 蓝图节点类型："Render"
@@ -549,10 +526,12 @@ public:
 inline void RunVM(ExecutionContext& ctx) {
 	while (ctx.current && ctx.running) {
 		NODE* node = ctx.current;
-		
+		node->func_for_VM(ctx);
+		if (!node->nextNode) {
+			ctx.running = false;
+		}
 		ctx.current = node->nextNode;
 		ctx.lastExecuted = node;
-		node->func_for_VM(ctx);
 	}
 }
 

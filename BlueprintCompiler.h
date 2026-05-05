@@ -6,7 +6,9 @@
 
 class BlueprintCompiler {
 public:
+	BlueprintData currentBlueprint;   //能够直接获得蓝图的原始数据
 	std::unordered_map<int, NODE*> nodeMap;  //用来存储节点ID和节点实例的映射关系，方便后续构建链接和执行
+	std::unordered_map<NODE*, While_Node*>nodeTowhile;    //用来进行循环的绑定
 	std::vector<NODE* > entryNodes;      //用来储存入口节点
 	void Compile(const BlueprintData& data);
 	void Run();

@@ -18,7 +18,7 @@ void BlueprintCompiler::Compile(const BlueprintData& data) {  //这是蓝图编�
 	}
 }
 
-NODE* BlueprintCompiler::CreateNode(const Node& n) {
+NODE* BlueprintCompiler::CreateNode(const Node& n) {  //这个函数负责创建各个节点
 	if (n.type == "ADD")return new Node_ADD();
 	if (n.type == "Sub") return new Node_Sub();
 	if (n.type == "Mul")return new Node_Mul();
@@ -49,28 +49,57 @@ NODE* BlueprintCompiler::CreateNode(const Node& n) {
 }
 
 void BlueprintCompiler::BuildExecLinks(const BlueprintData& data) {
-	// ★ 编译注意：当前只处理 sourcePin=="exec" 或 "then" 的标准执行流链接
-	// 以下节点类型的执行流链接需要特殊处理（当前未实现）：
-	//   If_Node:       sourcePin=="true"→trueBranch, sourcePin=="false"→falseBranch
-	//   While_Node:    sourcePin=="loopBody"→loopBody, 且需将 loopNode 指向自身
-	//   Break_Node:    nextNode 需指向所属 While 的 nextNode（循环外），loopNode 需指向所属 While
-	//   Continue_Node: loopNode 需指向所属 While
-	//   循环体末尾:    nextNode → While（回边），loopNode → While（标记所属循环）
 	for (auto& link : data.links) {
 		NODE* A = nodeMap[link.sourceNode];
 		NODE* B = nodeMap[link.targetNode];
 		if (!A || !B) continue;
-		if (link.sourcePin == "exec" || link.sourcePin == "then") {  //�����ͨ��ִ����
+		if (link.sourcePin == "exec" || link.sourcePin == "then") {  //这里进行基础的链接
 			A->nextNode = B;
 			B->lastNode = A;
 		}
+		auto* whileNode = dynamic_cast<While_Node*>(A);
+		if (whileNode && link.sourcePin == "OEXEC_Loop") {  //这里能够进行传导，将每一个节点都带上循环的属性
+			nodeTowhile[B] = whileNode;
+		}
+		bool updated = true;
+		while (updated) {
+			updated = false;
+			for (auto& link : data.links) {
+				NODE* A = nodeMap[link.sourceNode];
+				NODE* B = nodeMap[link.targetNode];
+				if (nodeTowhile.count(A) && !nodeTowhile.count(B)) {
+					nodeTowhile[B] = nodeTowhile[A];
+					updated = true;
+				}
+			}
+		}
+		for (auto& pair : nodeTowhile) {
+			NODE* node = pair.first;
+			While_Node* whileNode = pair.second;
+			if (auto* br = dynamic_cast<Break_Node*> (node)) {
+				br->loopNode = whileNode;
+			}
+			if (auto* cont = dynamic_cast<Continue_Node*>(node)) {
+				cont->loopNode = whileNode;
+			}
+		}
+
 		auto* branch = dynamic_cast<If_Node*>(A);
 		if (branch) {
-			if (link.sourcePin == "True") {
-				branch->trueBranch = B;
+			if (link.sourcePin == "OEXEC_A") {
+				branch->trueNode = B;
 			}
-			if (link.sourcePin == "False") {
-				branch->falseBranch = B;
+			if (link.sourcePin == "OEXEC_B") {
+				branch->falseNode = B;
+			}
+		}
+		auto* whileNode = dynamic_cast<While_Node*>(A);
+		if (whileNode) {
+			if (link.sourcePin == "OEXEC_Loop") {
+				whileNode->loopBodyNode = B;
+			}
+			else if (link.sourcePin == "OEXEC") {
+				whileNode->loopExitNode = B;
 			}
 		}
 	}
@@ -78,14 +107,7 @@ void BlueprintCompiler::BuildExecLinks(const BlueprintData& data) {
 
 
 
-void BlueprintCompiler::InitNodeData(const BlueprintData& data) {     //数据空间初始化
-	// ★ 编译注意：当前只处理 BinaryOpNode 和 SetTransforNode 的数据空间初始化
-	// 新增节点的初始化需求：
-	//   While_Node:       iterationCount 初始化为 Value::makeInt(0)（当前默认构造即可）
-	//   Render_Node:      outFrame 初始化（当前默认构造即可）
-	//   FrameProcess_Node: outFrame 初始化（同上）
-	//   GET_VAR:          outValue 初始化（当前默认构造即可）
-	//   其他节点：指针成员已默认 nullptr，无需额外操作
+void BlueprintCompiler::InitNodeData(const BlueprintData& data) {     
 	for (auto& n : data.nodes) {
 		NODE* node = nodeMap[n.id];
 		if (auto* bin = dynamic_cast<BinaryOpNode*>(node)) {  //如果是运算节点，那么就给他们的输入输出数据分配空间
@@ -98,60 +120,134 @@ void BlueprintCompiler::InitNodeData(const BlueprintData& data) {     //数据�
 		if (auto* st = dynamic_cast<SetTransforNode*>(node)) {
 		
 		}
+		if (auto* get = dynamic_cast<GET_VAR*>(node)) {
+			for (auto& pin : n.pins) {
+				if (pin.name == "VarToGet" && pin.literal.has_value()) {
+					get->varName = pin.literal.value();  // 获取该字面量的值
+				}
+			}
+		}
+
+		if (auto* set = dynamic_cast<SET_VAR*>(node)) {
+
+			for (auto& pin : n.pins) {
+
+				// 变量名（必须 literal）
+				if (pin.name == "VarToSet" && pin.literal.has_value()) {
+					set->varName = pin.literal.value();
+				}
+
+				// NewValue literal（如果存在）
+				if (pin.name == "NewValue" && pin.literal.has_value()) {
+
+					const std::string& val = pin.literal.value();
+
+					// 根据 type 转 Value
+					if (pin.type == "int") {
+						set->literalValue = Value::makeInt(std::stoi(val));
+					}
+					else if (pin.type == "float") {
+						set->literalValue = Value::makeFloat(std::stof(val));
+					}
+					else if (pin.type == "bool") {
+						set->literalValue = Value::makeBool(val == "true");
+					}
+					else if (pin.type == "string") {
+						set->literalValue = Value::makeString(val);
+					}
+				}
+			}
+		}
+
 	}
 }
 
 
-void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {  //数据流绑定函数
-	// ★ 编译注意：当前只处理 BinaryOpNode→BinaryOpNode 和 BinaryOpNode→SetTransforNode 的数据绑定
-	// 新增节点的数据绑定需求（当前未实现）：
-	//   If_Node:           targetPin=="condition"→condition (Value*)
-	//   While_Node:        targetPin=="condition"→condition (Value*)
-	//   PrintText_Node:    targetPin=="text"→text (Value*)
-	//   Render_Node:       targetPin=="samplingMethod"/"msaaMultiple"
-	//   FrameProcess_Node: targetPin=="processName"/"inFrame"/"processParams"
-	//   ShowtheFrame_Node: targetPin=="inFrame"
-	//   PlaySound_Node:    targetPin=="path"/"loop"
-	//   PauseSound_Node:   targetPin=="path"
-	//   GET_VAR:          targetPin=="varName"→varName (Value*)；其他节点可从此节点 outValue 读数据
-	//   SET_VAR:          targetPin=="varName"→varName, targetPin=="inValue"→inValue
+void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {
 	for (auto& link : data.links) {
+
 		if (link.sourcePin == "exec" || link.sourcePin == "then") {
-			continue;   //如果是执行流的链接直接跳过
-		}
-		NODE* src = nodeMap[link.sourceNode];
-		NODE* dst = nodeMap[link.targetNode];
-		if (!src || !dst) {
 			continue;
 		}
-		auto* srcBin = dynamic_cast<BinaryOpNode*>(src);
-		auto* dstBin = dynamic_cast<BinaryOpNode*>(dst);
-		if (srcBin && dstBin) {
-			int dstIndex = (link.targetPin == "A") ? 0 : 1;
-			dstBin->InData[dstIndex] = &srcBin->OutData[0];
-		}
-		auto* branch = dynamic_cast<If_Node*>(dst);
 
-		if (link.targetPin == "Condition") {
-			branch->condition = &srcBin->OutData[0];
+		NODE* src = nodeMap[link.sourceNode];
+		NODE* dst = nodeMap[link.targetNode];
+		if (!src || !dst) continue;
+
+		Value* out = nullptr;
+
+		// =========================
+		// 获取输出
+		// =========================
+		if (auto* bin = dynamic_cast<BinaryOpNode*>(src)) {
+			out = &bin->OutData[0];
 		}
-		auto* st = dynamic_cast<SetTransforNode*>(dst);
-		if (srcBin && st) {
-			if (link.targetPin == "Location.x") {
-				st->in_loc_x = &srcBin->OutData[0];
+		else if (auto* get = dynamic_cast<GET_VAR*>(src)) {
+			out = &get->outValue;
+		}
+		else if (auto* set = dynamic_cast<SET_VAR*>(src)) {
+			out = &set->outValue;   // ✅ 支持链式
+		}
+
+		// =========================
+		// Binary
+		// =========================
+		if (auto* dstBin = dynamic_cast<BinaryOpNode*>(dst)) {
+			if (out) {
+				int index = (link.targetPin == "A") ? 0 : 1;
+				dstBin->InData[index] = out;
 			}
-			if (link.targetPin == "Location.y") {
-				st->in_loc_y = &srcBin->OutData[0];
+		}
+
+		// =========================
+		// SET_VAR（只处理 NewValue）
+		// =========================
+		if (auto* set = dynamic_cast<SET_VAR*>(dst)) {
+			if (link.targetPin == "NewValue") {
+				set->inValue = out;
 			}
-			if (link.targetPin == "Location.z") {
-				st->in_loc_z = &srcBin->OutData[0];
+		}
+
+		// =========================
+		// If / While / Transform（你原来的）
+		// =========================
+		if (auto* branch = dynamic_cast<If_Node*>(dst)) {
+			if (link.targetPin == "shouldRunA" && out) {
+				branch->condition = out;
 			}
+		}
+
+		if (auto* whileNode = dynamic_cast<While_Node*>(dst)) {
+			if (link.targetPin == "shouldRunLoop" && out) {
+				whileNode->condition = out;
+			}
+		}
+
+		if (auto* st = dynamic_cast<SetTransforNode*>(dst)) {
+			if (link.targetPin == "Location.x") st->in_loc_x = out;
+			if (link.targetPin == "Location.y") st->in_loc_y = out;
+			if (link.targetPin == "Location.z") st->in_loc_z = out;
 		}
 	}
-}
-void BlueprintCompiler::Run() {
+}void BlueprintCompiler::Run() {
 	for (auto* entry : entryNodes) {
 		ExecutionContext ctx;
+		for (auto& var : currentBlueprint.variables) {   //这里进行变量表的绑定
+			Value v;
+			if (var.type == "int") {
+				v = Value::makeInt(std::stoi(var.value));
+			}
+			else if (var.type == "float") {
+				v = Value::makeFloat(std::stof(var.value));
+			}
+			else if (var.type == "bool") {
+				v = Value::makeBool(var.value == "true");
+			}
+			else if (var.type == "string") {
+				v = Value::makeString(var.value);
+			}
+			ctx.variables[var.name] = v;
+		}
 		ctx.current = entry;
 		RunVM(ctx);
 	}
