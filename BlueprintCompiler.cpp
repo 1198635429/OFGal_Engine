@@ -18,7 +18,7 @@ void BlueprintCompiler::Compile(const BlueprintData& data) {  //这是蓝图编�
 	}
 }
 
-NODE* BlueprintCompiler::CreateNode(const Node& n) {
+NODE* BlueprintCompiler::CreateNode(const Node& n) {  //这个函数负责创建各个节点
 	if (n.type == "ADD")return new Node_ADD();
 	if (n.type == "Sub") return new Node_Sub();
 	if (n.type == "Mul")return new Node_Mul();
@@ -134,6 +134,13 @@ void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {
 		if (!src || !dst) {
 			continue;
 		}
+		if (auto* get = dynamic_cast<GET_VAR*>(dst)) {
+			if (link.targetPin == "VarToGet") {
+				if (auto* srcNode = dynamic_cast<BinaryOpNode*>(src)) {
+				get->varName = 
+				}
+			}
+		}
 		auto* srcBin = dynamic_cast<BinaryOpNode*>(src);
 		auto* dstBin = dynamic_cast<BinaryOpNode*>(dst);
 		if (srcBin && dstBin) {
@@ -175,6 +182,22 @@ void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {
 void BlueprintCompiler::Run() {
 	for (auto* entry : entryNodes) {
 		ExecutionContext ctx;
+		for (auto& var : currentBlueprint.variables) {   //这里进行变量表的绑定
+			Value v;
+			if (var.type == "int") {
+				v = Value::makeInt(std::stoi(var.value));
+			}
+			else if (var.type == "float") {
+				v = Value::makeFloat(std::stof(var.value));
+			}
+			else if (var.type == "bool") {
+				v = Value::makeBool(var.value == "true");
+			}
+			else if (var.type == "string") {
+				v = Value::makeString(var.value);
+			}
+			ctx.variables[var.name] = v;
+		}
 		ctx.current = entry;
 		RunVM(ctx);
 	}

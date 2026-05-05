@@ -22,6 +22,7 @@ public:
 	NODE* current = nullptr;
 	bool running = true;
 	NODE* lastExecuted = nullptr;  //在调试的时候使用
+	std::unordered_map<std::string, Value> variables;  //蓝图上下文的变量表，GET_VAR/SET_VAR 节点通过这个表读写变量
 };
 
 // ============================================================
@@ -286,35 +287,43 @@ public:
 // ============================================================
 // 变量节点
 // ============================================================
-
-class GET_VAR : public NODE {  // 蓝图节点类型："GET_VAR"
+class GET_VAR : public NODE {
 public:
 	Value* varName = nullptr;
 	Value outValue;
+
 	void func_for_VM(ExecutionContext& ctx) override {
-		// TODO: 需要 BlueprintContext 集成后实现
-		// 从蓝图上下文的变量表中按 varName 查找，将值拷贝到 outValue
+		if (!varName || varName->type != ValueType::STRING) {
+			outValue = Value();
+			return;
+		}
+
+		std::string name = varName->s;
+
+		if (ctx.variables.find(name) != ctx.variables.end()) {
+			outValue = ctx.variables[name];
+		}
+		else {
+			std::cout << "Variable not found: " << name << "\n";
+			outValue = Value();
+		}
 	}
-	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="varName"→varName 指针绑定
-	//   2. InitNodeData 无需额外操作（outValue 是值类型，默认构造即可）
-	//   3. BuildDataLinks 中其他节点可能需要从此节点的 outValue 读取数据：
-	//      绑定方式为 dst->xxx = &GET_VAR->outValue（取地址）
 };
 
-class SET_VAR : public NODE {  // 蓝图节点类型："SET_VAR"
+class SET_VAR : public NODE {
 public:
-	Value* varName  = nullptr;
-	Value* inValue  = nullptr;
-	void func_for_VM(ExecutionContext& ctx) override {
-		// TODO: 需要 BlueprintContext 集成后实现
-		// 将 inValue 的值拷贝写入蓝图上下文变量表中 varName 对应的位置
-	}
-	// ★ 编译注意：
-	//   1. BuildDataLinks 需处理 targetPin=="varName"→varName, targetPin=="inValue"→inValue
-	//   2. 此节点无数据输出（只有执行流出口 nextNode）
-};
+	Value* varName = nullptr;
+	Value* inValue = nullptr;
 
+	void func_for_VM(ExecutionContext& ctx) override {
+		if (!varName || varName->type != ValueType::STRING) return;
+		if (!inValue) return;
+
+		std::string name = varName->s;
+
+		ctx.variables[name] = *inValue;
+	}
+};
 // ============================================================
 // 渲染相关节点
 // ============================================================
