@@ -289,43 +289,58 @@ public:
 // ============================================================
 class GET_VAR : public NODE {
 public:
-	Value* varName = nullptr;
+	std::string varName;   // 编译期写死
 	Value outValue;
 
 	void func_for_VM(ExecutionContext& ctx) override {
-		if (!varName || varName->type != ValueType::STRING) {
+
+		if (varName.empty()) {
+			std::cout << "GET_VAR: empty name\n";
 			outValue = Value();
 			return;
 		}
 
-		std::string name = varName->s;
-
-		if (ctx.variables.find(name) != ctx.variables.end()) {
-			outValue = ctx.variables[name];
+		auto it = ctx.variables.find(varName);
+		if (it != ctx.variables.end()) {
+			outValue = it->second;
 		}
 		else {
-			std::cout << "Variable not found: " << name << "\n";
+			std::cout << "Variable not found: " << varName << "\n";
 			outValue = Value();
 		}
 	}
 };
-
 class SET_VAR : public NODE {
 public:
-	Value* varName = nullptr;
-	Value* inValue = nullptr;
+	std::string varName;     // 来自 VarToSet.literal
+	Value* inValue = nullptr; // Link 输入
+	Value literalValue;      // literal 输入（备用）
+
+	Value outValue;          // VarCopy 输出
 
 	void func_for_VM(ExecutionContext& ctx) override {
-		if (!varName || varName->type != ValueType::STRING) return;
-		if (!inValue) return;
 
-		std::string name = varName->s;
+		if (varName.empty()) {
+			std::cout << "SET_VAR: empty name\n";
+			return;
+		}
 
-		ctx.variables[name] = *inValue;
+		Value finalValue;
+
+		// 优先使用数据流
+		if (inValue) {
+			finalValue = *inValue;
+		}
+		else {
+			finalValue = literalValue;
+		}
+
+		ctx.variables[varName] = finalValue;
+
+		// 输出副本
+		outValue = finalValue;
 	}
-};
-// ============================================================
-// 渲染相关节点
+};// 渲染相关节点
 // ============================================================
 
 class Render_Node : public NODE {  // 蓝图节点类型："Render"

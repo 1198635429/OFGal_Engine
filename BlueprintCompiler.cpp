@@ -120,66 +120,116 @@ void BlueprintCompiler::InitNodeData(const BlueprintData& data) {
 		if (auto* st = dynamic_cast<SetTransforNode*>(node)) {
 		
 		}
-	}
-}
-
-
-void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) { 
-	for (auto& link : data.links) {
-		if (link.sourcePin == "exec" || link.sourcePin == "then") {
-			continue;   //如果是执行流的链接直接跳过
-		}
-		NODE* src = nodeMap[link.sourceNode];
-		NODE* dst = nodeMap[link.targetNode];
-		if (!src || !dst) {
-			continue;
-		}
-		if (auto* get = dynamic_cast<GET_VAR*>(dst)) {
-			if (link.targetPin == "VarToGet") {
-				if (auto* srcNode = dynamic_cast<BinaryOpNode*>(src)) {
-				get->varName = 
+		if (auto* get = dynamic_cast<GET_VAR*>(node)) {
+			for (auto& pin : n.pins) {
+				if (pin.name == "VarToGet" && pin.literal.has_value()) {
+					get->varName = pin.literal.value();  // 获取该字面量的值
 				}
 			}
 		}
-		auto* srcBin = dynamic_cast<BinaryOpNode*>(src);
-		auto* dstBin = dynamic_cast<BinaryOpNode*>(dst);
-		if (srcBin && dstBin) {
-			int dstIndex = (link.targetPin == "A") ? 0 : 1;
-			dstBin->InData[dstIndex] = &srcBin->OutData[0];
-		}
-		auto* branch = dynamic_cast<If_Node*>(dst);
 
-		if (link.targetPin == "shouldRunA") {
-			branch->condition = &srcBin->OutData[0];
+		if (auto* set = dynamic_cast<SET_VAR*>(node)) {
+
+			for (auto& pin : n.pins) {
+
+				// 变量名（必须 literal）
+				if (pin.name == "VarToSet" && pin.literal.has_value()) {
+					set->varName = pin.literal.value();
+				}
+
+				// NewValue literal（如果存在）
+				if (pin.name == "NewValue" && pin.literal.has_value()) {
+
+					const std::string& val = pin.literal.value();
+
+					// 根据 type 转 Value
+					if (pin.type == "int") {
+						set->literalValue = Value::makeInt(std::stoi(val));
+					}
+					else if (pin.type == "float") {
+						set->literalValue = Value::makeFloat(std::stof(val));
+					}
+					else if (pin.type == "bool") {
+						set->literalValue = Value::makeBool(val == "true");
+					}
+					else if (pin.type == "string") {
+						set->literalValue = Value::makeString(val);
+					}
+				}
+			}
+		}
+
+	}
+}
+
+
+void BlueprintCompiler::BuildDataLinks(const BlueprintData& data) {
+	for (auto& link : data.links) {
+
+		if (link.sourcePin == "exec" || link.sourcePin == "then") {
+			continue;
+		}
+
+		NODE* src = nodeMap[link.sourceNode];
+		NODE* dst = nodeMap[link.targetNode];
+		if (!src || !dst) continue;
+
+		Value* out = nullptr;
+
+		// =========================
+		// 获取输出
+		// =========================
+		if (auto* bin = dynamic_cast<BinaryOpNode*>(src)) {
+			out = &bin->OutData[0];
+		}
+		else if (auto* get = dynamic_cast<GET_VAR*>(src)) {
+			out = &get->outValue;
+		}
+		else if (auto* set = dynamic_cast<SET_VAR*>(src)) {
+			out = &set->outValue;   // ✅ 支持链式
+		}
+
+		// =========================
+		// Binary
+		// =========================
+		if (auto* dstBin = dynamic_cast<BinaryOpNode*>(dst)) {
+			if (out) {
+				int index = (link.targetPin == "A") ? 0 : 1;
+				dstBin->InData[index] = out;
+			}
+		}
+
+		// =========================
+		// SET_VAR（只处理 NewValue）
+		// =========================
+		if (auto* set = dynamic_cast<SET_VAR*>(dst)) {
+			if (link.targetPin == "NewValue") {
+				set->inValue = out;
+			}
+		}
+
+		// =========================
+		// If / While / Transform（你原来的）
+		// =========================
+		if (auto* branch = dynamic_cast<If_Node*>(dst)) {
+			if (link.targetPin == "shouldRunA" && out) {
+				branch->condition = out;
+			}
 		}
 
 		if (auto* whileNode = dynamic_cast<While_Node*>(dst)) {
-
-			Value* out = nullptr;
-
-			if (auto* bin = dynamic_cast<BinaryOpNode*>(src)) {
-				out = &bin->OutData[0];
-			}
-
-			if (link.targetPin == "shouldRunLoop") {
+			if (link.targetPin == "shouldRunLoop" && out) {
 				whileNode->condition = out;
 			}
 		}
-		auto* st = dynamic_cast<SetTransforNode*>(dst);
-		if (srcBin && st) {
-			if (link.targetPin == "Location.x") {
-				st->in_loc_x = &srcBin->OutData[0];
-			}
-			if (link.targetPin == "Location.y") {
-				st->in_loc_y = &srcBin->OutData[0];
-			}
-			if (link.targetPin == "Location.z") {
-				st->in_loc_z = &srcBin->OutData[0];
-			}
+
+		if (auto* st = dynamic_cast<SetTransforNode*>(dst)) {
+			if (link.targetPin == "Location.x") st->in_loc_x = out;
+			if (link.targetPin == "Location.y") st->in_loc_y = out;
+			if (link.targetPin == "Location.z") st->in_loc_z = out;
 		}
 	}
-}
-void BlueprintCompiler::Run() {
+}void BlueprintCompiler::Run() {
 	for (auto* entry : entryNodes) {
 		ExecutionContext ctx;
 		for (auto& var : currentBlueprint.variables) {   //这里进行变量表的绑定
