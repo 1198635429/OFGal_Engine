@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <unordered_set>
 
 static const char* RESET = "\x1b[0m";
 static const char* CYAN = "\x1b[36m";
@@ -25,20 +26,12 @@ public:
 
     void Run();
 
-    void MoveSelection1Up();
-    void MoveSelection1Down();
-    void MoveSelection2Up();
-    void MoveSelection2Down();
-    void MoveToNextFlow();
-    void MoveToPrevFlow();
-    void OnDelete();
-    void Edit();
-
 private:
     std::wstring currentBPPath;
     BlueprintData currentBPData;
 
     int currentEntryNodeId;
+    int currentEntryIndex = 0;
     int selectedNodeId1;
     int selectedNodeId2;
 
@@ -69,11 +62,46 @@ private:
     void SetWindowSizeAndPosition();
     void FlushInputBuffer();
     void BuildAndPrintHelpText();
-    void BuildAndPrintCurrentFlow();
+    void AdjustBufferSize();
 
     std::string WideToUTF8(const std::wstring& wstr) const;
     int GetConsoleColumns();
 
+    int GetMaxNodeId() const;
+
     // 启动子进程（新控制台窗口）
     bool LaunchChildProcess(const std::wstring& exePath);
+
+private:
+    static constexpr int maxNodeNameLength = 21;
+    static constexpr int boxWidth = maxNodeNameLength + 4; // 25
+
+    // 执行流树节点
+    struct ExecTreeNode {
+        int nodeId;
+        std::string nodeType;
+        std::vector<std::pair<std::string, std::unique_ptr<ExecTreeNode>>> branches; // 分支标签 -> 子树
+    };
+
+    // 渲染结果
+    struct RenderBlock {
+        std::vector<std::string> lines;
+        int centerCol; // 框中心相对于 lines 的列索引
+    };
+
+    // 辅助函数
+    std::vector<int> GetEntryNodeIds() const;
+    std::unique_ptr<ExecTreeNode> BuildExecTree(int startNodeId) const;
+    RenderBlock RenderExecTree(const ExecTreeNode* node, std::unordered_set<int>& visited, int depth) const;
+    void PrintRenderBlock(const RenderBlock& block);
+
+    void MoveSelection1Up();
+    void MoveSelection1Down();
+    void MoveSelection2Up();
+    void MoveSelection2Down();
+    void MoveToNextFlow();
+    void MoveToPrevFlow();
+    void OnDelete();
+    void Edit();
+    void BuildAndPrintCurrentFlow();
 };

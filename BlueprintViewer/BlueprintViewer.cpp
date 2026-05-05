@@ -122,82 +122,80 @@ void BlueprintViewer::Run() {
     HANDLE eventsToWait[3] = { hLoadBPEvent, hNodeChangedEvent, hVarChangedEvent };
     DWORD numEvents = 3;
     if (!hLoadBPEvent) {
-        // 若 LoadBP 事件无效，只等待后两个
         eventsToWait[0] = hNodeChangedEvent;
         eventsToWait[1] = hVarChangedEvent;
         numEvents = 2;
     }
 
     for (;;) {
-        // 等待任意事件，20ms 超时
         DWORD dwWait = WaitForMultipleObjects(numEvents, eventsToWait, FALSE, 20);
 
         // 处理事件
         if (dwWait == WAIT_OBJECT_0) {
-            // LoadBP 事件（数组第一个）
+            // LoadBP 事件
             if (pSharedMem) {
-                const wchar_t* pPath = static_cast<const wchar_t*>(pSharedMem);
-                currentBPPath = pPath;
-                std::string filepath = WideToUTF8(currentBPPath);
-                currentBPData = ReadBPData(filepath);
+                try {
+                    const wchar_t* pPath = static_cast<const wchar_t*>(pSharedMem);
+                    currentBPPath = pPath;
+                    std::string filepath = WideToUTF8(currentBPPath);
+                    currentBPData = ReadBPData(filepath);
+
+                    AdjustBufferSize();
+
+                    if (hNodeViewerEvent) SetEvent(hNodeViewerEvent);
+                    if (hVariablesViewerEvent) SetEvent(hVariablesViewerEvent);
+                }
+                catch (const std::exception& e) {
+                    ClearScreen();
+                    std::cerr << "ERROR: Failed to load blueprint: " << e.what() << std::endl;
+                    currentBPData = BlueprintData{};
+                    currentBPPath.clear();
+                }
+                catch (...) {
+                    ClearScreen();
+                    std::cerr << "ERROR: Unknown error while loading blueprint." << std::endl;
+                    currentBPData = BlueprintData{};
+                    currentBPPath.clear();
+                }
             }
             if (hLoadBPEvent)
                 ResetEvent(hLoadBPEvent);
         }
         else if (dwWait == WAIT_OBJECT_0 + 1 ||
             (numEvents == 2 && eventsToWait[0] == hNodeChangedEvent && dwWait == WAIT_OBJECT_0)) {
-            // NodeChanged 事件
-            // TODO: 处理节点数据变更，重新加载当前蓝图数据等
             DEBUG_W(L"[BlueprintViewer] NodeChanged event signaled\n");
         }
         else if (dwWait == WAIT_OBJECT_0 + 2 ||
             (numEvents == 2 && eventsToWait[1] == hVarChangedEvent && dwWait == WAIT_OBJECT_0)) {
-            // VarChanged 事件
-            // TODO: 处理变量数据变更
             DEBUG_W(L"[BlueprintViewer] VarChanged event signaled\n");
         }
         else if (dwWait == WAIT_FAILED) {
-            // 事件句柄失效
             break;
         }
-        // WAIT_TIMEOUT 或其他情况继续循环
 
         // 输入监听
         if (!isEditing) {
             m_inputCollector.update();
         }
 
-        // 处理输入事件
         std::vector<InputEvent> eventsCopy = m_inputSystem.getEvents();
         m_inputSystem.clearEvent();
 
         for (const auto& ev : eventsCopy) {
             if (ev.type == InputType::KeyDown) {
                 switch (ev.key) {
-                case KeyCode::W:  
-                    MoveSelection1Up();
-                    break;
-                case KeyCode::S:  
-                    MoveSelection1Down();
-                    break;
-                case KeyCode::Up: 
-                    MoveSelection2Up();
-                    break;
-                case KeyCode::Down: 
-                    MoveSelection2Down();
-                    break;
-                case KeyCode::A:  
-                    MoveToPrevFlow();
-                    break;
-                case KeyCode::D:  
-                    MoveToNextFlow();
-                    break;
+                case KeyCode::W:   MoveSelection1Up(); break;
+                case KeyCode::S:   MoveSelection1Down(); break;
+                case KeyCode::Up:  MoveSelection2Up(); break;
+                case KeyCode::Down:MoveSelection2Down(); break;
+                case KeyCode::A:   MoveToPrevFlow(); break;
+                case KeyCode::D:   MoveToNextFlow(); break;
                 case KeyCode::F:
                     isEditing = true;
                     Edit();
                     isEditing = false;
                     break;
-                case KeyCode::Delete: 
+                case KeyCode::Delete:
                     isEditing = true;
                     OnDelete();
                     isEditing = false;
@@ -271,6 +269,16 @@ int BlueprintViewer::GetConsoleColumns() {
     return 80;
 }
 
+int BlueprintViewer::GetMaxNodeId() const {
+    int maxId = -1;
+    for (const auto& node : currentBPData.nodes) {
+        if (node.id > maxId) {
+            maxId = node.id;
+        }
+    }
+    return maxId;
+}
+
 void BlueprintViewer::SetWindowSizeAndPosition() {
     HWND hwndConsole = GetConsoleWindow();
     if (hwndConsole) {
@@ -316,10 +324,6 @@ void BlueprintViewer::BuildAndPrintHelpText() {
     std::cout << oss.str();
 }
 
-void BlueprintViewer::BuildAndPrintCurrentFlow() {
-    // 待实现
-}
-
 void BlueprintViewer::MoveSelection1Up() {
     ClearScreen();
     BuildAndPrintHelpText();
@@ -336,13 +340,26 @@ void BlueprintViewer::MoveSelection2Down() {
     ClearScreen();
     BuildAndPrintHelpText();
 }
-void BlueprintViewer::MoveToNextFlow() {
-    ClearScreen();
-    BuildAndPrintHelpText();
-}
 void BlueprintViewer::MoveToPrevFlow() {
-    ClearScreen();
-    BuildAndPrintHelpText();
+    auto entryIds = GetEntryNodeIds();
+    if (entryIds.empty()) return;
+    if (currentEntryIndex <= 0)
+        currentEntryIndex = static_cast<int>(entryIds.size()) - 1;
+    else
+        --currentEntryIndex;
+    currentEntryNodeId = entryIds[currentEntryIndex];
+    BuildAndPrintCurrentFlow();
+}
+
+void BlueprintViewer::MoveToNextFlow() {
+    auto entryIds = GetEntryNodeIds();
+    if (entryIds.empty()) return;
+    if (currentEntryIndex >= static_cast<int>(entryIds.size()) - 1)
+        currentEntryIndex = 0;
+    else
+        ++currentEntryIndex;
+    currentEntryNodeId = entryIds[currentEntryIndex];
+    BuildAndPrintCurrentFlow();
 }
 void BlueprintViewer::OnDelete() {
     ClearScreen();
@@ -351,4 +368,257 @@ void BlueprintViewer::OnDelete() {
 void BlueprintViewer::Edit() {
     ClearScreen();
     FlushInputBuffer();
+}
+
+std::vector<int> BlueprintViewer::GetEntryNodeIds() const {
+    std::vector<int> ids;
+    for (const auto& node : currentBPData.nodes) {
+        if (node.type == "BeginPlay" ||
+            node.type == "Play_per_N_ms" ||
+            node.type == "Play_when_N_push_down" ||
+            node.type == "Play_when_triggered") {
+            ids.push_back(node.id);
+        }
+    }
+    return ids;
+}
+
+std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(int startNodeId) const {
+    std::unordered_set<int> visited;
+    std::function<std::unique_ptr<ExecTreeNode>(int)> build = [&](int nodeId) -> std::unique_ptr<ExecTreeNode> {
+        if (visited.count(nodeId)) return nullptr; // 环
+        visited.insert(nodeId);
+
+        const Node* node = nullptr;
+        for (const auto& n : currentBPData.nodes) {
+            if (n.id == nodeId) { node = &n; break; }
+        }
+        if (!node) return nullptr;
+
+        auto treeNode = std::make_unique<ExecTreeNode>();
+        treeNode->nodeId = node->id;
+        treeNode->nodeType = node->type;
+
+        // 收集所有 exec 输出连接
+        for (const auto& pin : node->pins) {
+            if (pin.io == "O" && pin.type == "exec") {
+                for (const auto& link : currentBPData.links) {
+                    if (link.sourceNode == nodeId && link.sourcePin == pin.name) {
+                        auto child = build(link.targetNode);
+                        if (child) {
+                            std::string label = pin.name;
+                            // 可美化标签
+                            if (label == "OEXEC_A") label = "True";
+                            else if (label == "OEXEC_B") label = "False";
+                            else if (label == "OEXEC_Loop") label = "Loop";
+                            else if (label == "OEXEC") label = "";
+                            treeNode->branches.emplace_back(label, std::move(child));
+                        }
+                    }
+                }
+            }
+        }
+        return treeNode;
+        };
+    return build(startNodeId);
+}
+
+BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode* node,
+    std::unordered_set<int>& visited,
+    int depth) const {
+    RenderBlock result;
+    constexpr int MAX_DEPTH = 20;
+    if (!node || depth > MAX_DEPTH || visited.count(node->nodeId)) {
+        result.lines = { "[...]" };
+        result.centerCol = 2;
+        return result;
+    }
+    visited.insert(node->nodeId);
+
+    // 1. 当前节点框
+    std::string top = "+" + std::string(boxWidth - 2, '-') + "+";
+    std::string middle = "| " + node->nodeType + std::string(maxNodeNameLength - node->nodeType.size(), ' ') + " |";
+    std::string bottom = "+" + std::string(boxWidth - 2, '-') + "+";
+    std::vector<std::string> nodeLines = { top, middle, bottom };
+    int center = boxWidth / 2;
+
+    if (node->branches.empty()) {
+        result.lines = std::move(nodeLines);
+        result.centerCol = center;
+        return result;
+    }
+
+    // 2. 递归子分支
+    std::vector<RenderBlock> childBlocks;
+    for (auto& branch : node->branches) {
+        childBlocks.push_back(RenderExecTree(branch.second.get(), visited, depth + 1));
+    }
+
+    if (node->branches.size() == 1) {
+        // === 单分支：垂直对齐中心 ===
+        const auto& child = childBlocks[0];
+        // 确保子块中心不大于父中心，否则扩大总宽度并右移父框
+        int requiredCenter = std::max(center, child.centerCol);
+        int parentLeftPad = requiredCenter - center;        // 父框需要右侧填充的空格数（实际是左右一起移）
+        int tempWidth = parentLeftPad + boxWidth;           // 父框最小需要的宽度
+        int totalWidth = std::max(tempWidth, (int)child.lines[0].size());
+
+        int newCenter = parentLeftPad + center;             // 新的父中心
+        int childLeftPad = newCenter - child.centerCol;     // >=0 保证
+        int childRightPad = totalWidth - (childLeftPad + (int)child.lines[0].size());
+
+        // 父节点行：左边填充 parentLeftPad 个空格，右边填充剩余
+        for (auto& line : nodeLines) {
+            line = std::string(parentLeftPad, ' ') + line
+                + std::string(totalWidth - parentLeftPad - (int)line.size(), ' ');
+        }
+        result.lines = std::move(nodeLines);
+
+        // 连接线
+        std::string line1(totalWidth, ' '); line1[newCenter] = '|';
+        std::string line2(totalWidth, ' '); line2[newCenter] = 'v';
+        result.lines.push_back(line1);
+        result.lines.push_back(line2);
+
+        // 子块行
+        for (auto& line : child.lines) {
+            result.lines.push_back(std::string(childLeftPad, ' ') + line + std::string(childRightPad, ' '));
+        }
+        result.centerCol = newCenter;
+    }
+    else {
+        // === 多分支：水平拼接（原有代码未动）===
+        int totalWidth = boxWidth;
+        std::vector<int> offsets;
+        int gap = 3;
+        for (auto& blk : childBlocks) {
+            offsets.push_back(totalWidth);
+            totalWidth += (int)blk.lines[0].size() + gap;
+        }
+        if (!offsets.empty()) totalWidth -= gap;
+
+        int parentStart = (totalWidth - boxWidth) / 2;
+        result.lines.reserve(3 + std::max_element(childBlocks.begin(), childBlocks.end(),
+            [](auto& a, auto& b) { return a.lines.size() < b.lines.size(); })->lines.size() + 2);
+
+        std::string topPad(parentStart, ' ');
+        result.lines.push_back(topPad + top + std::string(totalWidth - parentStart - boxWidth, ' '));
+        result.lines.push_back(topPad + middle + std::string(totalWidth - parentStart - boxWidth, ' '));
+        result.lines.push_back(topPad + bottom + std::string(totalWidth - parentStart - boxWidth, ' '));
+        int parentCenter = parentStart + center;
+
+        std::string conn1(totalWidth, ' '); conn1[parentCenter] = '|';
+        result.lines.push_back(conn1);
+
+        std::string conn2(totalWidth, ' ');
+        for (size_t i = 0; i < childBlocks.size(); ++i) {
+            int childCenter = offsets[i] + childBlocks[i].centerCol;
+            int left = std::min(parentCenter, childCenter);
+            int right = std::max(parentCenter, childCenter);
+            for (int x = left; x <= right; ++x) {
+                if (x == childCenter)
+                    conn2[x] = 'v';
+                else if (conn2[x] == ' ')
+                    conn2[x] = '-';
+            }
+        }
+        result.lines.push_back(conn2);
+
+        size_t maxChildLines = 0;
+        for (auto& blk : childBlocks) maxChildLines = std::max(maxChildLines, blk.lines.size());
+        for (size_t row = 0; row < maxChildLines; ++row) {
+            std::string line(totalWidth, ' ');
+            for (size_t i = 0; i < childBlocks.size(); ++i) {
+                size_t childRow = row < childBlocks[i].lines.size() ? row : childBlocks[i].lines.size() - 1;
+                std::string childLine = childBlocks[i].lines[childRow];
+                for (size_t col = 0; col < childLine.size(); ++col) {
+                    if (offsets[i] + col < totalWidth)
+                        line[offsets[i] + col] = childLine[col];
+                }
+            }
+            result.lines.push_back(line);
+        }
+        result.centerCol = parentCenter;
+    }
+
+    return result;
+}
+
+void BlueprintViewer::PrintRenderBlock(const RenderBlock& block) {
+    ClearScreen();
+    for (const auto& line : block.lines) {
+        std::cout << line << '\n';
+    }
+}
+
+void BlueprintViewer::BuildAndPrintCurrentFlow() {
+    auto entryIds = GetEntryNodeIds();
+    if (entryIds.empty()) {
+        ClearScreen();
+        std::cout << "The Blueprint is empty. Please Add your first Entry Node.\n";
+        return;
+    }
+    if (currentEntryIndex < 0 || currentEntryIndex >= static_cast<int>(entryIds.size()))
+        currentEntryIndex = 0;
+    currentEntryNodeId = entryIds[currentEntryIndex];
+
+    auto tree = BuildExecTree(currentEntryNodeId);
+    if (!tree) {
+        ClearScreen();
+        std::cout << "Failed to build execution flow.\n";
+        return;
+    }
+    std::unordered_set<int> visited;
+    auto block = RenderExecTree(tree.get(), visited, 0);
+    PrintRenderBlock(block);
+}
+
+void BlueprintViewer::AdjustBufferSize() {
+    // 预测所有入口节点的执行流渲染尺寸（取最大值）
+    int requiredWidth = 0;
+    int requiredHeight = 0;
+    auto entryIds = GetEntryNodeIds();
+    if (!entryIds.empty()) {
+        for (int entryId : entryIds) {
+            auto tree = BuildExecTree(entryId);
+            if (!tree) continue;
+            std::unordered_set<int> visited;
+            auto block = RenderExecTree(tree.get(), visited, 0);
+            int w = 0;
+            for (const auto& line : block.lines) {
+                if ((int)line.size() > w) w = (int)line.size();
+            }
+            int h = (int)block.lines.size();
+            requiredWidth = std::max(requiredWidth, w);
+            requiredHeight = std::max(requiredHeight, h);
+        }
+    }
+    else {
+        // 空蓝图：可用帮助文本的尺寸作为最小尺寸（例如帮助文本宽度约80，高度约10）
+        requiredWidth = 80;
+        requiredHeight = 10;
+    }
+
+    // 加20个单位的边距
+    requiredWidth += 20;
+    requiredHeight += 20;
+
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut == INVALID_HANDLE_VALUE) return;
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(hOut, &csbi)) return;
+
+    // 当前窗口尺寸
+    int windowWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    int windowHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+
+    // 缓冲区必须大于窗口（至少大20）
+    int newWidth = std::max(requiredWidth, windowWidth + 20);
+    int newHeight = std::max(requiredHeight, windowHeight + 20);
+
+    COORD bufferSize;
+    bufferSize.X = static_cast<SHORT>(newWidth);
+    bufferSize.Y = static_cast<SHORT>(newHeight);
+    SetConsoleScreenBufferSize(hOut, bufferSize);
 }
