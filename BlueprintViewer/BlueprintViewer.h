@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <algorithm> // for std::find
 #include <utility>  // for std::pair
+#include <conio.h>
 
 static const char* RESET = "\x1b[0m";
 static const char* CYAN = "\x1b[36m";
@@ -129,8 +130,8 @@ private:
     void MoveSelection2Down();
     void MoveToNextFlow();
     void MoveToPrevFlow();
-    void OnDelete();
-    void Edit();
+    bool OnDelete();
+    bool Edit();
     void BuildAndPrintCurrentFlow();
 
     void PrintEntryNodes();

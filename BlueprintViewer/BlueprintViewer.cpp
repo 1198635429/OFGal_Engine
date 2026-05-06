@@ -240,12 +240,14 @@ void BlueprintViewer::Run() {
                 case KeyCode::D:   MoveToNextFlow(); break;
                 case KeyCode::F:
                     isEditing = true;
-                    Edit();
+                    if(Edit())
+                        SetEvent(hLoadBPEvent);
                     isEditing = false;
                     break;
                 case KeyCode::Delete:
                     isEditing = true;
-                    OnDelete();
+                    if(OnDelete())
+                        SetEvent(hLoadBPEvent);
                     isEditing = false;
                     break;
                 default: break;
@@ -449,13 +451,150 @@ void BlueprintViewer::MoveToNextFlow() {
     currentEntryNodeId = entryIds[currentEntryIndex];
     RenderAll();
 }
-void BlueprintViewer::OnDelete() {
+bool BlueprintViewer::OnDelete() {
     ClearScreen();
     FlushInputBuffer();
+
+    // ---------- 1. 检验选中是否有效 ----------
+    auto nodeExists = [&](int id) {
+        for (const auto& nd : currentBPData.nodes) {
+            if (nd.id == id) return true;
+        }
+        return false;
+        };
+
+    if (!nodeExists(selectedNodeId1) || !nodeExists(selectedNodeId2)) {
+        std::cout << "Invalid selection. One or both selected nodes do not exist.\n";
+        std::cout << "Press any key to continue...\n";
+        _getch();
+        return false;
+    }
+
+    // ---------- 2. 选择对一号还是二号操作 ----------
+    int targetNodeId = -1;
+    while (true) {
+        ClearScreen();
+        std::cout << "Which selection to delete?\n";
+        std::cout << "1 - Node ID " << selectedNodeId1 << " (Selection 1)\n";
+        std::cout << "2 - Node ID " << selectedNodeId2 << " (Selection 2)\n";
+        std::cout << "Press Esc to cancel.\n";
+
+        int ch = _getch();
+        if (ch == 27) {          // Esc 键
+            return false;
+        }
+        if (ch == '1') {
+            targetNodeId = selectedNodeId1;
+            break;
+        }
+        else if (ch == '2') {
+            targetNodeId = selectedNodeId2;
+            break;
+        }
+        // 其他按键则继续循环
+    }
+
+    // 获取目标节点的信息，用于显示
+    const Node* targetNode = nullptr;
+    for (const auto& nd : currentBPData.nodes) {
+        if (nd.id == targetNodeId) {
+            targetNode = &nd;
+            break;
+        }
+    }
+    if (!targetNode) {
+        // 理论上不会发生，但如果结构异常则取消
+        return false;
+    }
+
+    // ---------- 3. 确认删除并显示节点信息 ----------
+    ClearScreen();
+    std::cout << "Are you sure you want to delete the following node and ALL its successors?\n\n";
+    std::cout << "  Node ID   : " << targetNode->id << "\n";
+    std::cout << "  Node Type : " << targetNode->type << "\n\n";
+    std::cout << "Confirm? (Y/N)  Esc to cancel.\n";
+
+    int ch = _getch();
+    while (ch != 'y' && ch != 'Y' && ch != 'n' && ch != 'N' && ch != 27) {
+        ch = _getch();      // 只接受 Y/N/Esc
+    }
+    if (ch == 27 || ch == 'n' || ch == 'N') {
+        return false;
+    }
+
+    // ---------- 4. 执行删除（在副本上操作） ----------
+    // 收集所有执行流可达的后继节点（包含自身）
+    auto getDescendants = [&](int startId) -> std::vector<int> {
+        std::unordered_set<int> visited;
+        std::function<void(int)> dfs = [&](int id) {
+            if (visited.count(id)) return;
+            visited.insert(id);
+            const Node* node = nullptr;
+            for (const auto& n : currentBPData.nodes) {
+                if (n.id == id) { node = &n; break; }
+            }
+            if (!node) return;
+            // 遍历所有 exec 类型的输出引脚
+            for (const auto& pin : node->pins) {
+                if (pin.io == "O" && pin.type == "exec") {
+                    for (const auto& link : currentBPData.links) {
+                        if (link.sourceNode == id && link.sourcePin == pin.name) {
+                            dfs(link.targetNode);
+                        }
+                    }
+                }
+            }
+            };
+        dfs(startId);
+        return std::vector<int>(visited.begin(), visited.end());
+        };
+
+    std::vector<int> idsToDelete = getDescendants(targetNodeId);
+
+    // 复制 currentBPData 到 temp
+    BlueprintData temp = currentBPData;
+
+    // 删除节点
+    temp.nodes.erase(
+        std::remove_if(temp.nodes.begin(), temp.nodes.end(),
+            [&](const Node& n) {
+                return std::find(idsToDelete.begin(), idsToDelete.end(), n.id) != idsToDelete.end();
+            }),
+        temp.nodes.end()
+    );
+
+    // 删除所有与被删节点相关的连接
+    temp.links.erase(
+        std::remove_if(temp.links.begin(), temp.links.end(),
+            [&](const Link& l) {
+                return std::find(idsToDelete.begin(), idsToDelete.end(), l.sourceNode) != idsToDelete.end()
+                    || std::find(idsToDelete.begin(), idsToDelete.end(), l.targetNode) != idsToDelete.end();
+            }),
+        temp.links.end()
+    );
+
+    // 删除与被删节点关联的事件（例如入口事件）
+    temp.events.erase(
+        std::remove_if(temp.events.begin(), temp.events.end(),
+            [&](const Event& e) {
+                return std::find(idsToDelete.begin(), idsToDelete.end(), e.id) != idsToDelete.end();
+            }),
+        temp.events.end()
+    );
+
+    // 写回文件（路径由 wstring 转为 UTF-8 string）
+    std::string pathStr = WideToUTF8(currentBPPath);
+    WriteBPData(pathStr, temp);
+
+    return true;
 }
-void BlueprintViewer::Edit() {
+bool BlueprintViewer::Edit() {
     ClearScreen();
     FlushInputBuffer();
+
+    bool shouldReload = false;
+
+    return shouldReload;
 }
 
 std::vector<int> BlueprintViewer::GetEntryNodeIds() const {
