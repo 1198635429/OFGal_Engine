@@ -5,24 +5,28 @@
 #include <vector>
 
 WindowsSystem::WindowsSystem() {
+    /*
     OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
     
     OpenLevelTreeList();
 
     CreateBPEditorIPC();
+    */
 }
 WindowsSystem::WindowsSystem(std::string path) {
     size_t len = path.size() + 1;
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, path.c_str());
     
+    /*
     OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
 
     OpenLevelTreeList();
-    
+
     CreateBPEditorIPC();
+    */
 }
 
 WindowsSystem::~WindowsSystem() {
