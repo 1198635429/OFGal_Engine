@@ -642,19 +642,21 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
         }
         result.lines.push_back(conn2);
 
-        // 子块行（使用 replace 安全保留颜色）
+        // 子块行（修复：删除填充，高度不足时保留空格）
         size_t maxChildLines = 0;
         for (auto& blk : childBlocks) maxChildLines = std::max(maxChildLines, blk.lines.size());
         for (size_t row = 0; row < maxChildLines; ++row) {
             std::string line(totalWidth, ' ');
             for (size_t i = 0; i < childBlocks.size(); ++i) {
-                size_t childRow = row < childBlocks[i].lines.size() ? row : childBlocks[i].lines.size() - 1;
-                const std::string& childLine = childBlocks[i].lines[childRow];
-                int visLen = (int)VisibleLength(childLine);
-                if (offsets[i] + visLen <= totalWidth)
-                    line.replace(offsets[i], visLen, childLine);
-                else if (offsets[i] < totalWidth)
-                    line.replace(offsets[i], totalWidth - offsets[i], childLine);
+                if (row < childBlocks[i].lines.size()) {
+                    const std::string& childLine = childBlocks[i].lines[row];
+                    int visLen = (int)VisibleLength(childLine);
+                    if (offsets[i] + visLen <= totalWidth)
+                        line.replace(offsets[i], visLen, childLine);
+                    else if (offsets[i] < totalWidth)
+                        line.replace(offsets[i], totalWidth - offsets[i], childLine);
+                }
+                // 超出子块高度的行：不做任何填充，保留空格
             }
             result.lines.push_back(line);
         }
