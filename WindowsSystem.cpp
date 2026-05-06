@@ -9,17 +9,20 @@ WindowsSystem::WindowsSystem() {
     RefreshProjectStructureViewer();
     
     OpenLevelTreeList();
+
+    CreateBPEditorIPC();
 }
 WindowsSystem::WindowsSystem(std::string path) {
     size_t len = path.size() + 1;
     currentProjectDirectory = new char[len];
     strcpy_s(currentProjectDirectory, len, path.c_str());
-    /*
+    
     OpenProjectStructureViewer(exePath_ProjectStructureViewer.c_str());
     RefreshProjectStructureViewer();
 
     OpenLevelTreeList();
-    */
+    
+    CreateBPEditorIPC();
 }
 
 WindowsSystem::~WindowsSystem() {
@@ -36,6 +39,7 @@ WindowsSystem::~WindowsSystem() {
     if (m_hLevelTreeListPathUpdateEvent) {
         CloseHandle(m_hLevelTreeListPathUpdateEvent);
     }
+    DestroyBPEditorIPC();
     delete[] currentProjectDirectory;
 }
 
@@ -426,6 +430,92 @@ bool WindowsSystem::OpenLevelTreeList() {
     return true;
 }
 
+void WindowsSystem::CreateBPEditorIPC() {
+    std::string globalEventName = "Global\\OFGal_Engine_BlueprintViewer_LoadBP";
+    m_hBPEditorLoadEvent = CreateEventA(NULL, FALSE, FALSE, globalEventName.c_str());
+    if (!m_hBPEditorLoadEvent) {
+        OutputDebugStringA(("CreateEvent failed: " + globalEventName).c_str());
+    }
+
+    std::string globalMemName = "Global\\OFGal_Engine_BlueprintViewer_BlueprintPath";
+    m_hBPEditorPathMap = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, BPEDITOR_PATH_SIZE, globalMemName.c_str());
+    if (!m_hBPEditorPathMap) {
+        OutputDebugStringA(("CreateFileMapping failed: " + globalMemName).c_str());
+    }
+    else {
+        m_pBPEditorPathView = static_cast<char*>(MapViewOfFile(m_hBPEditorPathMap, FILE_MAP_WRITE, 0, 0, BPEDITOR_PATH_SIZE));
+        if (!m_pBPEditorPathView) {
+            OutputDebugStringA("MapViewOfFile failed for BPEditorPath");
+            CloseHandle(m_hBPEditorPathMap);
+            m_hBPEditorPathMap = NULL;
+        }
+        else {
+            memset(m_pBPEditorPathView, 0, BPEDITOR_PATH_SIZE);
+        }
+    }
+}
+
+void WindowsSystem::DestroyBPEditorIPC() {
+    if (m_pBPEditorPathView) {
+        UnmapViewOfFile(m_pBPEditorPathView);
+        m_pBPEditorPathView = nullptr;
+    }
+    if (m_hBPEditorPathMap) {
+        CloseHandle(m_hBPEditorPathMap);
+        m_hBPEditorPathMap = NULL;
+    }
+    if (m_hBPEditorLoadEvent) {
+        CloseHandle(m_hBPEditorLoadEvent);
+        m_hBPEditorLoadEvent = NULL;
+    }
+}
+
+void WindowsSystem::Start_BPEditor() {
+    auto it = childProcesses.find("BlueprintViewer");
+    if (it != childProcesses.end()) {
+        CleanupChildProcess("BlueprintViewer");
+    }
+
+    std::wstring cmdLine = L"\"" + exePath_BlueprintViewer + L"\"";
+    std::vector<wchar_t> cmdBuffer(cmdLine.begin(), cmdLine.end());
+    cmdBuffer.push_back(L'\0');
+
+    STARTUPINFOW si = { sizeof(STARTUPINFOW) };
+    PROCESS_INFORMATION pi = { 0 };
+    DWORD creationFlags = CREATE_NEW_CONSOLE;
+
+    if (!CreateProcessW(nullptr, cmdBuffer.data(), nullptr, nullptr, FALSE, creationFlags, nullptr, nullptr, &si, &pi)) {
+        OutputDebugStringA("Failed to start BlueprintViewer");
+        return;
+    }
+
+    ChildProcessInfo info;
+    info.hProcess = pi.hProcess;
+    info.hThread = pi.hThread;         // 保留句柄，勿关闭
+    info.processId = pi.dwProcessId;
+    childProcesses["BlueprintViewer"] = info;
+}
+
+void WindowsSystem::Notify_BPEditor(std::wstring BlueprintPath) {
+    if (!m_pBPEditorPathView) return;
+
+    // 写入宽字符路径
+    size_t maxBytes = BPEDITOR_PATH_SIZE;
+    size_t pathBytes = (BlueprintPath.length() + 1) * sizeof(wchar_t);
+    if (pathBytes > maxBytes) pathBytes = maxBytes;
+    memcpy(m_pBPEditorPathView, BlueprintPath.c_str(), pathBytes);
+
+    // 确保终止符
+    if (pathBytes >= sizeof(wchar_t)) {
+        reinterpret_cast<wchar_t*>(m_pBPEditorPathView)[(pathBytes / sizeof(wchar_t)) - 1] = L'\0';
+    }
+
+    // 触发加载事件
+    if (m_hBPEditorLoadEvent) {
+        SetEvent(m_hBPEditorLoadEvent);
+    }
+}
+
 void WindowsSystem::Run() {
     const std::string key = "ProjectStructureViewer";
     auto it = childProcesses.find(key);
@@ -460,6 +550,20 @@ void WindowsSystem::Run() {
         else if (result == WAIT_OBJECT_0 + 1) {
             targetPath = &m_lastOpenedBlueprintPath;
             blockName = "OpenBlueprintPath";
+
+            auto blockIt = info.sharedMems.find(blockName);
+            if (blockIt != info.sharedMems.end() && blockIt->second.pView) {
+                const WCHAR* pWide = reinterpret_cast<const WCHAR*>(blockIt->second.pView);
+                *targetPath = std::wstring(pWide);
+                OutputDebugStringW((std::wstring(L"[OFGal_Engine] Opened file: ") + *targetPath + L"\n").c_str());
+            }
+
+            HWND hwndBP = FindWindowW(NULL, L"OFGal_Engine/BlueprintViewer");
+            if (!hwndBP) {
+                Start_BPEditor();
+                Sleep(100);
+            }
+            Notify_BPEditor(m_lastOpenedBlueprintPath);
         }
         else if (result == WAIT_OBJECT_0 + 2) {
             targetPath = &m_lastOpenedTextPath;

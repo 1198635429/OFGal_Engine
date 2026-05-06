@@ -18,69 +18,57 @@ public:
     }
 
     // ---------- 通用子进程管理接口 ----------
-    // 启动一个子进程（根据配置）
     bool LaunchChildProcessW(const ChildProcessConfig& config);
-
-    // 向指定子进程的指定共享内存块写入数据（二进制安全）
     bool WriteToSharedMemory(const std::string& processKey, const std::string& blockName, const void* data, size_t dataSize);
-
-    // 从指定子进程的指定共享内存块读取数据（返回读取的字节数，需预分配缓冲区）
     size_t ReadFromSharedMemory(const std::string& processKey, const std::string& blockName, void* outBuffer, size_t bufferSize);
-
-    // 触发指定子进程的某个事件
     bool SignalEvent(const std::string& processKey, const std::string& eventName);
-
-    // 重置事件（用于手动重置事件）
     bool ResetEvent(const std::string& processKey, const std::string& eventName);
-
-    // 等待子进程退出（可选超时毫秒，默认 INFINITE）
     bool WaitForChildExit(const std::string& processKey, DWORD timeoutMs = INFINITE);
-
-    // 关闭子进程（先发送 Exit 事件，超时后强制终止）
     bool TerminateChildProcess(const std::string& processKey, DWORD gracefulTimeoutMs = 1000);
-
-    // 检查子进程是否仍在运行
     bool IsChildRunning(const std::string& processKey);
-
-    // 获取子进程的共享内存块大小
     DWORD GetSharedMemorySize(const std::string& processKey, const std::string& blockName);
 
     // ---------- 便捷包装 ----------
     bool OpenProjectStructureViewer(const wchar_t* ViewerExePath, const wchar_t* ProjectRoot = nullptr);
     bool RefreshProjectStructureViewer();
     bool CloseProjectStructureViewer();
-
     bool OpenLevelTreeList();
-
     void Run();
+
+    // ---------- 蓝图编辑器控制 ----------
+    void Start_BPEditor();                                 // 启动蓝图编辑器子进程
+    void Notify_BPEditor(std::wstring BlueprintPath);     // 通知编辑器加载指定蓝图
 
 private:
     WindowsSystem();
     WindowsSystem(std::string temppath);
     ~WindowsSystem();
 
-    // 内部辅助：创建指定子进程的共享内存块
     bool CreateSharedMemoryBlock(const std::string& processKey, const std::string& blockName, DWORD size, bool readOnly = false);
-
-    // 内部辅助：创建指定子进程的事件
     bool CreateProcessEvent(const std::string& processKey, const std::string& eventName, bool initialState = false);
-
-    // 清理指定子进程的所有资源
     void CleanupChildProcess(const std::string& processKey);
-
-    // 构建全局唯一名称（保持 ANSI 用于内核对象命名）
     std::string MakeGlobalName(const std::string& processKey, const std::string& suffix);
 
-private:
+    // 蓝图编辑器 IPC 初始化 / 销毁
+    void CreateBPEditorIPC();
+    void DestroyBPEditorIPC();
+
     LevelData* currentLevel = nullptr;
-    char* currentProjectDirectory = nullptr;                            // 当前项目路径（ANSI）
+    char* currentProjectDirectory = nullptr;
     std::wstring exePath_ProjectStructureViewer = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\ProjectStructureViewer.exe";
     std::wstring exePath_LevelTreeList = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\LevelTreeList.exe";
+    std::wstring exePath_BlueprintViewer = L"E:\\Projects\\C++Projects\\OFGal_Engine\\x64\\Debug\\BlueprintViewer.exe";
 
-    std::unordered_map<std::string, ChildProcessInfo> childProcesses;   // 进程键 -> 信息
+    std::unordered_map<std::string, ChildProcessInfo> childProcesses;
     std::wstring m_lastOpenedLevelPath;
     std::wstring m_lastOpenedBlueprintPath;
     std::wstring m_lastOpenedTextPath;
 
     HANDLE m_hLevelTreeListPathUpdateEvent;
+
+    // 蓝图编辑器 IPC 对象（独立于子进程管理）
+    HANDLE m_hBPEditorLoadEvent = NULL;
+    HANDLE m_hBPEditorPathMap = NULL;
+    char* m_pBPEditorPathView = nullptr;
+    static const DWORD BPEDITOR_PATH_SIZE = 4096;
 };
