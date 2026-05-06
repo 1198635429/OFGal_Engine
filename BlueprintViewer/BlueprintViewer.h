@@ -12,6 +12,7 @@
 #include <vector>
 #include <sstream>
 #include <unordered_set>
+#include <algorithm> // for std::find
 #include <utility>  // for std::pair
 
 static const char* RESET = "\x1b[0m";
@@ -33,8 +34,11 @@ private:
 
     int currentEntryNodeId;
     int currentEntryIndex = 0;
-    int selectedNodeId1;
-    int selectedNodeId2;
+    int selectedNodeId1 = -1;
+    int selectedNodeId2 = -1;
+
+    // ---- 当前执行流的节点顺序（先序） ----
+    std::vector<int> m_flowNodeOrder;
 
     // ---- 同步对象 ----
     HANDLE hLoadBPEvent;
@@ -64,6 +68,7 @@ private:
     void FlushInputBuffer();
     void BuildAndPrintHelpText();
     void AdjustBufferSize();
+    void ScrollToTheTop();
 
     std::string WideToUTF8(const std::wstring& wstr) const;
     int GetConsoleColumns();
@@ -72,6 +77,9 @@ private:
 
     // 启动子进程（新控制台窗口）
     bool LaunchChildProcess(const std::wstring& exePath);
+
+    // 工具：计算字符串中可见字符的长度（忽略ANSI转义序列）
+    static size_t VisibleLength(const std::string& s);
 
 private:
     static constexpr int maxNodeNameLength = 21;
@@ -94,7 +102,12 @@ private:
     std::vector<int> GetEntryNodeIds() const;
     std::vector<std::pair<int, std::string>> GetEntryNodes() const;
     std::unique_ptr<ExecTreeNode> BuildExecTree(int startNodeId) const;
-    RenderBlock RenderExecTree(const ExecTreeNode* node, std::unordered_set<int>& visited, int depth) const;
+    void CollectNodeOrder(const ExecTreeNode* node, std::vector<int>& order) const;
+    RenderBlock RenderExecTree(const ExecTreeNode* node,
+        std::unordered_set<int>& visited,
+        int depth,
+        int selectedId1,
+        int selectedId2) const;
     void PrintRenderBlock(const RenderBlock& block);
 
     void MoveSelection1Up();

@@ -85,7 +85,6 @@ BlueprintViewer::~BlueprintViewer() {
     if (hNodeChangedEvent) CloseHandle(hNodeChangedEvent);
     if (hVarChangedEvent) CloseHandle(hVarChangedEvent);
 
-    // 关闭子进程句柄（不强制终止进程）
     for (HANDLE h : childProcesses) {
         if (h) CloseHandle(h);
     }
@@ -95,19 +94,17 @@ bool BlueprintViewer::LaunchChildProcess(const std::wstring& exePath) {
     STARTUPINFOW si = { sizeof(STARTUPINFOW) };
     PROCESS_INFORMATION pi = {};
 
-    // 创建新控制台窗口
     BOOL success = CreateProcessW(
         exePath.c_str(),
-        NULL,                   // 命令行
-        NULL, NULL,             // 安全属性
-        FALSE,                  // 不继承句柄
-        CREATE_NEW_CONSOLE,     // 新控制台窗口
+        NULL,
+        NULL, NULL,
+        FALSE,
+        CREATE_NEW_CONSOLE,
         NULL, NULL,
         &si, &pi);
 
     if (success) {
         childProcesses.push_back(pi.hProcess);
-        // 关闭线程句柄，不需要
         CloseHandle(pi.hThread);
         return true;
     }
@@ -118,7 +115,6 @@ bool BlueprintViewer::LaunchChildProcess(const std::wstring& exePath) {
 }
 
 void BlueprintViewer::Run() {
-    // 构建等待事件数组：LoadBP, NodeChanged, VarChanged
     HANDLE eventsToWait[3] = { hLoadBPEvent, hNodeChangedEvent, hVarChangedEvent };
     DWORD numEvents = 3;
     if (!hLoadBPEvent) {
@@ -140,7 +136,6 @@ void BlueprintViewer::Run() {
                     std::string filepath = WideToUTF8(currentBPPath);
                     currentBPData = ReadBPData(filepath);
 
-                    // 设置默认入口节点
                     auto entryIds = GetEntryNodeIds();
                     if (!entryIds.empty()) {
                         currentEntryIndex = 0;
@@ -150,6 +145,10 @@ void BlueprintViewer::Run() {
                         currentEntryIndex = 0;
                         currentEntryNodeId = -1;
                     }
+
+                    // 重置选中节点（将在 BuildAndPrintCurrentFlow 中更新）
+                    selectedNodeId1 = currentEntryNodeId;
+                    selectedNodeId2 = currentEntryNodeId;
 
                     AdjustBufferSize();
 
@@ -336,20 +335,62 @@ void BlueprintViewer::BuildAndPrintHelpText() {
 }
 
 void BlueprintViewer::MoveSelection1Up() {
-    ClearScreen();
-    BuildAndPrintHelpText();
+    if (m_flowNodeOrder.empty()) return;
+    auto it = std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId1);
+    if (it == m_flowNodeOrder.end()) {
+        selectedNodeId1 = m_flowNodeOrder.front();
+    }
+    else {
+        if (it == m_flowNodeOrder.begin())
+            it = m_flowNodeOrder.end() - 1;
+        else
+            --it;
+        selectedNodeId1 = *it;
+    }
+    RenderAll();
 }
 void BlueprintViewer::MoveSelection1Down() {
-    ClearScreen();
-    BuildAndPrintHelpText();
+    if (m_flowNodeOrder.empty()) return;
+    auto it = std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId1);
+    if (it == m_flowNodeOrder.end()) {
+        selectedNodeId1 = m_flowNodeOrder.front();
+    }
+    else {
+        ++it;
+        if (it == m_flowNodeOrder.end())
+            it = m_flowNodeOrder.begin();
+        selectedNodeId1 = *it;
+    }
+    RenderAll();
 }
 void BlueprintViewer::MoveSelection2Up() {
-    ClearScreen();
-    BuildAndPrintHelpText();
+    if (m_flowNodeOrder.empty()) return;
+    auto it = std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId2);
+    if (it == m_flowNodeOrder.end()) {
+        selectedNodeId2 = m_flowNodeOrder.front();
+    }
+    else {
+        if (it == m_flowNodeOrder.begin())
+            it = m_flowNodeOrder.end() - 1;
+        else
+            --it;
+        selectedNodeId2 = *it;
+    }
+    RenderAll();
 }
 void BlueprintViewer::MoveSelection2Down() {
-    ClearScreen();
-    BuildAndPrintHelpText();
+    if (m_flowNodeOrder.empty()) return;
+    auto it = std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId2);
+    if (it == m_flowNodeOrder.end()) {
+        selectedNodeId2 = m_flowNodeOrder.front();
+    }
+    else {
+        ++it;
+        if (it == m_flowNodeOrder.end())
+            it = m_flowNodeOrder.begin();
+        selectedNodeId2 = *it;
+    }
+    RenderAll();
 }
 void BlueprintViewer::MoveToPrevFlow() {
     auto entryIds = GetEntryNodeIds();
@@ -410,7 +451,7 @@ std::vector<std::pair<int, std::string>> BlueprintViewer::GetEntryNodes() const 
 std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(int startNodeId) const {
     std::unordered_set<int> visited;
     std::function<std::unique_ptr<ExecTreeNode>(int)> build = [&](int nodeId) -> std::unique_ptr<ExecTreeNode> {
-        if (visited.count(nodeId)) return nullptr; // 环
+        if (visited.count(nodeId)) return nullptr;
         visited.insert(nodeId);
 
         const Node* node = nullptr;
@@ -423,7 +464,6 @@ std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(in
         treeNode->nodeId = node->id;
         treeNode->nodeType = node->type;
 
-        // 收集所有 exec 输出连接
         for (const auto& pin : node->pins) {
             if (pin.io == "O" && pin.type == "exec") {
                 for (const auto& link : currentBPData.links) {
@@ -431,7 +471,6 @@ std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(in
                         auto child = build(link.targetNode);
                         if (child) {
                             std::string label = pin.name;
-                            // 可美化标签
                             if (label == "OEXEC_A") label = "True";
                             else if (label == "OEXEC_B") label = "False";
                             else if (label == "OEXEC_Loop") label = "Loop";
@@ -447,9 +486,33 @@ std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(in
     return build(startNodeId);
 }
 
+void BlueprintViewer::CollectNodeOrder(const ExecTreeNode* node, std::vector<int>& order) const {
+    if (!node) return;
+    order.push_back(node->nodeId);
+    for (const auto& branch : node->branches) {
+        CollectNodeOrder(branch.second.get(), order);
+    }
+}
+
+// 工具：去除ANSI转义序列后的可见字符长度
+size_t BlueprintViewer::VisibleLength(const std::string& s) {
+    size_t len = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '\x1b' && i + 1 < s.size() && s[i + 1] == '[') {
+            while (i < s.size() && s[i] != 'm') ++i;
+        }
+        else {
+            ++len;
+        }
+    }
+    return len;
+}
+
 BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode* node,
     std::unordered_set<int>& visited,
-    int depth) const {
+    int depth,
+    int selectedId1,
+    int selectedId2) const {
     RenderBlock result;
     constexpr int MAX_DEPTH = 20;
     if (!node || depth > MAX_DEPTH || visited.count(node->nodeId)) {
@@ -459,11 +522,34 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
     }
     visited.insert(node->nodeId);
 
-    // 1. 当前节点框
-    std::string top = "+" + std::string(boxWidth - 2, '-') + "+";
+    // 1. 当前节点框（纯文本构造，之后根据需要添加颜色）
+    std::string top_raw = "+" + std::string(boxWidth - 2, '-') + "+";
     std::string middle = "| " + node->nodeType + std::string(maxNodeNameLength - node->nodeType.size(), ' ') + " |";
-    std::string bottom = "+" + std::string(boxWidth - 2, '-') + "+";
-    std::vector<std::string> nodeLines = { top, middle, bottom };
+    std::string bottom_raw = "+" + std::string(boxWidth - 2, '-') + "+";
+
+    // 根据选中状态决定边框颜色
+    bool isSel1 = (node->nodeId == selectedId1);
+    bool isSel2 = (node->nodeId == selectedId2);
+    std::string top_colored, bottom_colored;
+
+    if (isSel1 && isSel2) {
+        top_colored = CYAN + top_raw + RESET;
+        bottom_colored = ORANGE + bottom_raw + RESET;
+    }
+    else if (isSel1) {
+        top_colored = CYAN + top_raw + RESET;
+        bottom_colored = CYAN + bottom_raw + RESET;
+    }
+    else if (isSel2) {
+        top_colored = ORANGE + top_raw + RESET;
+        bottom_colored = ORANGE + bottom_raw + RESET;
+    }
+    else {
+        top_colored = top_raw;
+        bottom_colored = bottom_raw;
+    }
+
+    std::vector<std::string> nodeLines = { top_colored, middle, bottom_colored };
     int center = boxWidth / 2;
 
     if (node->branches.empty()) {
@@ -475,26 +561,27 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
     // 2. 递归子分支
     std::vector<RenderBlock> childBlocks;
     for (auto& branch : node->branches) {
-        childBlocks.push_back(RenderExecTree(branch.second.get(), visited, depth + 1));
+        childBlocks.push_back(RenderExecTree(branch.second.get(), visited, depth + 1, selectedId1, selectedId2));
     }
 
     if (node->branches.size() == 1) {
         // === 单分支：垂直对齐中心 ===
         const auto& child = childBlocks[0];
-        // 确保子块中心不大于父中心，否则扩大总宽度并右移父框
         int requiredCenter = std::max(center, child.centerCol);
-        int parentLeftPad = requiredCenter - center;        // 父框需要右侧填充的空格数（实际是左右一起移）
-        int tempWidth = parentLeftPad + boxWidth;           // 父框最小需要的宽度
-        int totalWidth = std::max(tempWidth, (int)child.lines[0].size());
+        int parentLeftPad = requiredCenter - center;
+        int tempWidth = parentLeftPad + boxWidth;
+        int childWidth = (int)VisibleLength(child.lines[0]);
+        int totalWidth = std::max(tempWidth, childWidth);
 
-        int newCenter = parentLeftPad + center;             // 新的父中心
-        int childLeftPad = newCenter - child.centerCol;     // >=0 保证
-        int childRightPad = totalWidth - (childLeftPad + (int)child.lines[0].size());
+        int newCenter = parentLeftPad + center;
+        int childLeftPad = newCenter - child.centerCol;
+        int childRightPad = totalWidth - (childLeftPad + childWidth);
 
-        // 父节点行：左边填充 parentLeftPad 个空格，右边填充剩余
+        // 父节点行填充（保证可见宽度为 totalWidth）
         for (auto& line : nodeLines) {
+            int visLen = (int)VisibleLength(line);
             line = std::string(parentLeftPad, ' ') + line
-                + std::string(totalWidth - parentLeftPad - (int)line.size(), ' ');
+                + std::string(totalWidth - parentLeftPad - visLen, ' ');
         }
         result.lines = std::move(nodeLines);
 
@@ -511,13 +598,13 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
         result.centerCol = newCenter;
     }
     else {
-        // === 多分支：水平拼接（原有代码未动）===
+        // === 多分支：水平拼接 ===
         int totalWidth = boxWidth;
         std::vector<int> offsets;
         int gap = 3;
         for (auto& blk : childBlocks) {
             offsets.push_back(totalWidth);
-            totalWidth += (int)blk.lines[0].size() + gap;
+            totalWidth += (int)VisibleLength(blk.lines[0]) + gap;
         }
         if (!offsets.empty()) totalWidth -= gap;
 
@@ -525,12 +612,19 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
         result.lines.reserve(3 + std::max_element(childBlocks.begin(), childBlocks.end(),
             [](auto& a, auto& b) { return a.lines.size() < b.lines.size(); })->lines.size() + 2);
 
-        std::string topPad(parentStart, ' ');
-        result.lines.push_back(topPad + top + std::string(totalWidth - parentStart - boxWidth, ' '));
-        result.lines.push_back(topPad + middle + std::string(totalWidth - parentStart - boxWidth, ' '));
-        result.lines.push_back(topPad + bottom + std::string(totalWidth - parentStart - boxWidth, ' '));
+        // 父节点框行（带颜色，需根据可见宽度计算右侧填充）
+        {
+            int topVisLen = (int)VisibleLength(top_colored);
+            int midVisLen = (int)VisibleLength(middle);
+            int botVisLen = (int)VisibleLength(bottom_colored);
+            std::string topPad(parentStart, ' ');
+            result.lines.push_back(topPad + top_colored + std::string(totalWidth - parentStart - topVisLen, ' '));
+            result.lines.push_back(topPad + middle + std::string(totalWidth - parentStart - midVisLen, ' '));
+            result.lines.push_back(topPad + bottom_colored + std::string(totalWidth - parentStart - botVisLen, ' '));
+        }
         int parentCenter = parentStart + center;
 
+        // 连接线
         std::string conn1(totalWidth, ' '); conn1[parentCenter] = '|';
         result.lines.push_back(conn1);
 
@@ -548,17 +642,19 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
         }
         result.lines.push_back(conn2);
 
+        // 子块行（使用 replace 安全保留颜色）
         size_t maxChildLines = 0;
         for (auto& blk : childBlocks) maxChildLines = std::max(maxChildLines, blk.lines.size());
         for (size_t row = 0; row < maxChildLines; ++row) {
             std::string line(totalWidth, ' ');
             for (size_t i = 0; i < childBlocks.size(); ++i) {
                 size_t childRow = row < childBlocks[i].lines.size() ? row : childBlocks[i].lines.size() - 1;
-                std::string childLine = childBlocks[i].lines[childRow];
-                for (size_t col = 0; col < childLine.size(); ++col) {
-                    if (offsets[i] + col < totalWidth)
-                        line[offsets[i] + col] = childLine[col];
-                }
+                const std::string& childLine = childBlocks[i].lines[childRow];
+                int visLen = (int)VisibleLength(childLine);
+                if (offsets[i] + visLen <= totalWidth)
+                    line.replace(offsets[i], visLen, childLine);
+                else if (offsets[i] < totalWidth)
+                    line.replace(offsets[i], totalWidth - offsets[i], childLine);
             }
             result.lines.push_back(line);
         }
@@ -569,7 +665,6 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
 }
 
 void BlueprintViewer::PrintRenderBlock(const RenderBlock& block) {
-    // 移除原有的 ClearScreen()，由 RenderAll 统一清屏
     for (const auto& line : block.lines) {
         std::cout << line << '\n';
     }
@@ -579,6 +674,7 @@ void BlueprintViewer::BuildAndPrintCurrentFlow() {
     auto entryIds = GetEntryNodeIds();
     if (entryIds.empty()) {
         std::cout << "The Blueprint is empty. Please Add your first Entry Node.\n";
+        m_flowNodeOrder.clear();
         return;
     }
     if (currentEntryIndex < 0 || currentEntryIndex >= static_cast<int>(entryIds.size()))
@@ -588,15 +684,32 @@ void BlueprintViewer::BuildAndPrintCurrentFlow() {
     auto tree = BuildExecTree(currentEntryNodeId);
     if (!tree) {
         std::cout << "Failed to build execution flow.\n";
+        m_flowNodeOrder.clear();
         return;
     }
+
+    // 收集节点顺序
+    m_flowNodeOrder.clear();
+    CollectNodeOrder(tree.get(), m_flowNodeOrder);
+
+    // 如果当前选中节点不在顺序中，重置到入口节点
+    if (!m_flowNodeOrder.empty()) {
+        if (std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId1) == m_flowNodeOrder.end())
+            selectedNodeId1 = currentEntryNodeId;
+        if (std::find(m_flowNodeOrder.begin(), m_flowNodeOrder.end(), selectedNodeId2) == m_flowNodeOrder.end())
+            selectedNodeId2 = currentEntryNodeId;
+    }
+    else {
+        selectedNodeId1 = -1;
+        selectedNodeId2 = -1;
+    }
+
     std::unordered_set<int> visited;
-    auto block = RenderExecTree(tree.get(), visited, 0);
+    auto block = RenderExecTree(tree.get(), visited, 0, selectedNodeId1, selectedNodeId2);
     PrintRenderBlock(block);
 }
 
 void BlueprintViewer::AdjustBufferSize() {
-    // 预测所有入口节点的执行流渲染尺寸（取最大值）
     int requiredWidth = 0;
     int requiredHeight = 0;
     auto entryIds = GetEntryNodeIds();
@@ -605,10 +718,11 @@ void BlueprintViewer::AdjustBufferSize() {
             auto tree = BuildExecTree(entryId);
             if (!tree) continue;
             std::unordered_set<int> visited;
-            auto block = RenderExecTree(tree.get(), visited, 0);
+            auto block = RenderExecTree(tree.get(), visited, 0, selectedNodeId1, selectedNodeId2);
             int w = 0;
             for (const auto& line : block.lines) {
-                if ((int)line.size() > w) w = (int)line.size();
+                int visLen = (int)VisibleLength(line);
+                if (visLen > w) w = visLen;
             }
             int h = (int)block.lines.size();
             requiredWidth = std::max(requiredWidth, w);
@@ -616,12 +730,10 @@ void BlueprintViewer::AdjustBufferSize() {
         }
     }
     else {
-        // 空蓝图：可用帮助文本的尺寸作为最小尺寸（例如帮助文本宽度约80，高度约10）
         requiredWidth = 80;
         requiredHeight = 10;
     }
 
-    // 加20个单位的边距
     requiredWidth += 20;
     requiredHeight += 20;
 
@@ -631,11 +743,9 @@ void BlueprintViewer::AdjustBufferSize() {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (!GetConsoleScreenBufferInfo(hOut, &csbi)) return;
 
-    // 当前窗口尺寸
     int windowWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
     int windowHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 
-    // 缓冲区必须大于窗口（至少大20）
     int newWidth = std::max(requiredWidth, windowWidth + 20);
     int newHeight = std::max(requiredHeight, windowHeight + 20);
 
@@ -645,6 +755,17 @@ void BlueprintViewer::AdjustBufferSize() {
     SetConsoleScreenBufferSize(hOut, bufferSize);
 }
 
+void BlueprintViewer::ScrollToTheTop() {
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut == INVALID_HANDLE_VALUE) return;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (!GetConsoleScreenBufferInfo(hOut, &csbi)) return;
+    SMALL_RECT window = csbi.srWindow;
+    SHORT height = window.Bottom - window.Top + 1;
+    window.Top = 0;
+    window.Bottom = height - 1;
+    SetConsoleWindowInfo(hOut, TRUE, &window);
+}
 
 void BlueprintViewer::PrintEntryNodes() {
     auto entryNodes = GetEntryNodes();
@@ -659,8 +780,8 @@ void BlueprintViewer::PrintEntryNodes() {
     }
 
     struct EntryItem {
-        std::string plain;   // 无ANSI转义，用于计算宽度
-        std::string styled;  // 可能包含颜色代码
+        std::string plain;
+        std::string styled;
     };
     std::vector<EntryItem> items;
     for (size_t i = 0; i < entryNodes.size(); ++i) {
@@ -681,12 +802,11 @@ void BlueprintViewer::PrintEntryNodes() {
     int currentLineLen = 0;
     for (size_t i = 0; i < items.size(); ++i) {
         const auto& item = items[i];
-        // 加上一个分隔空格（行首不加）
         int neededLen = (currentLineLen > 0 ? 1 : 0) + static_cast<int>(item.plain.length());
         if (currentLineLen > 0 && currentLineLen + neededLen > cols) {
             out << "\n";
             currentLineLen = 0;
-            neededLen = static_cast<int>(item.plain.length()); // 无前导空格
+            neededLen = static_cast<int>(item.plain.length());
         }
         if (currentLineLen > 0) {
             out << " ";
@@ -707,4 +827,6 @@ void BlueprintViewer::RenderAll() {
     std::string splitLine(cols, '-');
     std::cout << splitLine << "\n";
     BuildAndPrintCurrentFlow();
+
+    ScrollToTheTop();
 }
