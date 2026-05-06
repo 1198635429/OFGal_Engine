@@ -12,6 +12,7 @@
 #include <vector>
 #include <sstream>
 #include <unordered_set>
+#include <utility>  // for std::pair
 
 static const char* RESET = "\x1b[0m";
 static const char* CYAN = "\x1b[36m";
@@ -91,6 +92,7 @@ private:
 
     // 辅助函数
     std::vector<int> GetEntryNodeIds() const;
+    std::vector<std::pair<int, std::string>> GetEntryNodes() const;
     std::unique_ptr<ExecTreeNode> BuildExecTree(int startNodeId) const;
     RenderBlock RenderExecTree(const ExecTreeNode* node, std::unordered_set<int>& visited, int depth) const;
     void PrintRenderBlock(const RenderBlock& block);
@@ -104,4 +106,7 @@ private:
     void OnDelete();
     void Edit();
     void BuildAndPrintCurrentFlow();
+
+    void PrintEntryNodes();
+    void RenderAll();
 };

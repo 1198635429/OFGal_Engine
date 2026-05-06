@@ -1,0 +1,232 @@
+{
+    "Name": "multiFlow",
+    "id": 1,
+    "Nodes": [
+        {
+            "id": 0,
+            "type": "BeginPlay",
+            "pins": [
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 1,
+            "type": "SetVariable",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "VarToSet", "io": "I", "type": "string", "literal": "loop_condition" },
+                { "name": "NewValue", "io": "I", "type": "bool", "literal": "true" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "VarCopy", "io": "O", "type": "bool" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 2,
+            "type": "SetVariable",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "VarToSet", "io": "I", "type": "string", "literal": "counter" },
+                { "name": "NewValue", "io": "I", "type": "int", "literal": "3" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "VarCopy", "io": "O", "type": "int" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 3,
+            "type": "GetVariable",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "VarToGet", "io": "I", "type": "string", "literal": "loop_condition" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "VarCopy", "io": "O", "type": "bool" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 4,
+            "type": "GetVariable",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "VarToGet", "io": "I", "type": "string", "literal": "loop_condition" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "VarCopy", "io": "O", "type": "bool" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 5,
+            "type": "Add",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "A", "io": "I", "type": "int", "literal": "10" },
+                { "name": "B", "io": "I", "type": "int", "literal": "5" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "result", "io": "O", "type": "int" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 6,
+            "type": "PrintText",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "Text", "io": "I", "type": "string", "literal": "Start if test" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 7,
+            "type": "if",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "shouldRunA", "io": "I", "type": "bool" },
+                { "name": "OEXEC_A", "io": "O", "type": "exec" },
+                { "name": "OEXEC_B", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 8,
+            "type": "PrintText",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "Text", "io": "I", "type": "string", "literal": "True branch" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 9,
+            "type": "PrintText",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "Text", "io": "I", "type": "string", "literal": "False branch" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 10,
+            "type": "while",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "shouldRunLoop", "io": "I", "type": "bool" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "OEXEC_Loop", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 11,
+            "type": "PrintText",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "Text", "io": "I", "type": "string", "literal": "Inside loop" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 12,
+            "type": "SetVariable",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "VarToSet", "io": "I", "type": "string", "literal": "counter" },
+                { "name": "NewValue", "io": "I", "type": "int", "literal": "2" },
+                { "name": "OEXEC", "io": "O", "type": "exec" },
+                { "name": "VarCopy", "io": "O", "type": "int" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 13,
+            "type": "break",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 14,
+            "type": "Exit",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" }
+            ],
+            "properties": {}
+        },
+
+        {
+            "id": 15,
+            "type": "Play_when_N_push_down",
+            "pins": [
+                { "name": "Btn", "io": "I", "type": "string", "literal": "Space" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 16,
+            "type": "PrintText",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" },
+                { "name": "Text", "io": "I", "type": "string", "literal": "Key pressed" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 17,
+            "type": "Exit",
+            "pins": [
+                { "name": "IEXEC", "io": "I", "type": "exec" }
+            ],
+            "properties": {}
+        },
+        {
+            "id": 18,
+            "type": "Play_per_N_ms",
+            "pins": [
+                { "name": "Time", "io": "I", "type": "int", "literal": "50" },
+                { "name": "OEXEC", "io": "O", "type": "exec" }
+            ],
+            "properties": {}
+        }
+    ],
+    "Variables": [
+        { "name": "loop_condition", "type": "bool", "value": "true" },
+        { "name": "counter", "type": "int", "value": "3" }
+    ],
+    "InParameters": [],
+    "OutParameters": [],
+    "Events": [
+        { "Event_Name": "BeginPlay", "id": 0 },
+        { "Event_Name": "Play_when_N_push_down", "id": 15 },
+        { "Event_Name": "Play_per_N_ms", "id": 18 }
+    ],
+    "Links": [
+        { "sourceNode": 0, "sourcePin": "OEXEC", "targetNode": 1, "targetPin": "IEXEC" },
+        { "sourceNode": 1, "sourcePin": "OEXEC", "targetNode": 2, "targetPin": "IEXEC" },
+        { "sourceNode": 2, "sourcePin": "OEXEC", "targetNode": 3, "targetPin": "IEXEC" },
+        { "sourceNode": 3, "sourcePin": "OEXEC", "targetNode": 5, "targetPin": "IEXEC" },
+        { "sourceNode": 5, "sourcePin": "OEXEC", "targetNode": 6, "targetPin": "IEXEC" },
+        { "sourceNode": 6, "sourcePin": "OEXEC", "targetNode": 7, "targetPin": "IEXEC" },
+        { "sourceNode": 7, "sourcePin": "OEXEC_A", "targetNode": 8, "targetPin": "IEXEC" },
+        { "sourceNode": 7, "sourcePin": "OEXEC_B", "targetNode": 9, "targetPin": "IEXEC" },
+        { "sourceNode": 8, "sourcePin": "OEXEC", "targetNode": 4, "targetPin": "IEXEC" },
+        { "sourceNode": 9, "sourcePin": "OEXEC", "targetNode": 4, "targetPin": "IEXEC" },
+        { "sourceNode": 4, "sourcePin": "OEXEC", "targetNode": 10, "targetPin": "IEXEC" },
+        { "sourceNode": 10, "sourcePin": "OEXEC_Loop", "targetNode": 11, "targetPin": "IEXEC" },
+        { "sourceNode": 11, "sourcePin": "OEXEC", "targetNode": 12, "targetPin": "IEXEC" },
+        { "sourceNode": 12, "sourcePin": "OEXEC", "targetNode": 13, "targetPin": "IEXEC" },
+        { "sourceNode": 10, "sourcePin": "OEXEC", "targetNode": 14, "targetPin": "IEXEC" },
+        { "sourceNode": 3, "sourcePin": "VarCopy", "targetNode": 7, "targetPin": "shouldRunA" },
+        { "sourceNode": 4, "sourcePin": "VarCopy", "targetNode": 10, "targetPin": "shouldRunLoop" },
+
+        { "sourceNode": 15, "sourcePin": "OEXEC", "targetNode": 16, "targetPin": "IEXEC" },
+        { "sourceNode": 16, "sourcePin": "OEXEC", "targetNode": 17, "targetPin": "IEXEC" }
+    ]
+}

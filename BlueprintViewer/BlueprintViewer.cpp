@@ -140,10 +140,23 @@ void BlueprintViewer::Run() {
                     std::string filepath = WideToUTF8(currentBPPath);
                     currentBPData = ReadBPData(filepath);
 
+                    // 设置默认入口节点
+                    auto entryIds = GetEntryNodeIds();
+                    if (!entryIds.empty()) {
+                        currentEntryIndex = 0;
+                        currentEntryNodeId = entryIds[0];
+                    }
+                    else {
+                        currentEntryIndex = 0;
+                        currentEntryNodeId = -1;
+                    }
+
                     AdjustBufferSize();
 
                     if (hNodeViewerEvent) SetEvent(hNodeViewerEvent);
                     if (hVariablesViewerEvent) SetEvent(hVariablesViewerEvent);
+
+                    RenderAll();
                 }
                 catch (const std::exception& e) {
                     ClearScreen();
@@ -237,8 +250,6 @@ void BlueprintViewer::ConfigureConsole() {
 }
 
 void BlueprintViewer::ClearScreen() {
-    //std::cout << "\x1b[2J\x1b[H" << std::flush;
-
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) return;
 
@@ -313,8 +324,8 @@ void BlueprintViewer::BuildAndPrintHelpText() {
 
     oss << CYAN << "W" << RESET << " - Move selection 1 up\n";
     oss << CYAN << "S" << RESET << " - Move selection 1 down\n";
-    oss << CYAN << "Up" << RESET << " - Move selection 2 up\n";   // ↑
-    oss << CYAN << "Down" << RESET << " - Move selection 2 down\n"; // ↓
+    oss << CYAN << "Up" << RESET << " - Move selection 2 up\n";
+    oss << CYAN << "Down" << RESET << " - Move selection 2 down\n";
     oss << CYAN << "Delete" << RESET << " - Remove selected node 1 and all its descendants\n";
     oss << CYAN << "F" << RESET << " - More operations\n";
     oss << CYAN << "A" << RESET << " - Previous execution flow\n";
@@ -348,7 +359,7 @@ void BlueprintViewer::MoveToPrevFlow() {
     else
         --currentEntryIndex;
     currentEntryNodeId = entryIds[currentEntryIndex];
-    BuildAndPrintCurrentFlow();
+    RenderAll();
 }
 
 void BlueprintViewer::MoveToNextFlow() {
@@ -359,7 +370,7 @@ void BlueprintViewer::MoveToNextFlow() {
     else
         ++currentEntryIndex;
     currentEntryNodeId = entryIds[currentEntryIndex];
-    BuildAndPrintCurrentFlow();
+    RenderAll();
 }
 void BlueprintViewer::OnDelete() {
     ClearScreen();
@@ -381,6 +392,19 @@ std::vector<int> BlueprintViewer::GetEntryNodeIds() const {
         }
     }
     return ids;
+}
+
+std::vector<std::pair<int, std::string>> BlueprintViewer::GetEntryNodes() const {
+    std::vector<std::pair<int, std::string>> entries;
+    for (const auto& node : currentBPData.nodes) {
+        if (node.type == "BeginPlay" ||
+            node.type == "Play_per_N_ms" ||
+            node.type == "Play_when_N_push_down" ||
+            node.type == "Play_when_triggered") {
+            entries.emplace_back(node.id, node.type);
+        }
+    }
+    return entries;
 }
 
 std::unique_ptr<BlueprintViewer::ExecTreeNode> BlueprintViewer::BuildExecTree(int startNodeId) const {
@@ -545,7 +569,7 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
 }
 
 void BlueprintViewer::PrintRenderBlock(const RenderBlock& block) {
-    ClearScreen();
+    // 移除原有的 ClearScreen()，由 RenderAll 统一清屏
     for (const auto& line : block.lines) {
         std::cout << line << '\n';
     }
@@ -554,7 +578,6 @@ void BlueprintViewer::PrintRenderBlock(const RenderBlock& block) {
 void BlueprintViewer::BuildAndPrintCurrentFlow() {
     auto entryIds = GetEntryNodeIds();
     if (entryIds.empty()) {
-        ClearScreen();
         std::cout << "The Blueprint is empty. Please Add your first Entry Node.\n";
         return;
     }
@@ -564,7 +587,6 @@ void BlueprintViewer::BuildAndPrintCurrentFlow() {
 
     auto tree = BuildExecTree(currentEntryNodeId);
     if (!tree) {
-        ClearScreen();
         std::cout << "Failed to build execution flow.\n";
         return;
     }
@@ -621,4 +643,68 @@ void BlueprintViewer::AdjustBufferSize() {
     bufferSize.X = static_cast<SHORT>(newWidth);
     bufferSize.Y = static_cast<SHORT>(newHeight);
     SetConsoleScreenBufferSize(hOut, bufferSize);
+}
+
+
+void BlueprintViewer::PrintEntryNodes() {
+    auto entryNodes = GetEntryNodes();
+    int cols = GetConsoleColumns();
+    std::string separator(cols, '=');
+    std::cout << separator << "\n";
+
+    if (entryNodes.empty()) {
+        std::cout << "No entry nodes.\n";
+        std::cout << separator << "\n";
+        return;
+    }
+
+    struct EntryItem {
+        std::string plain;   // 无ANSI转义，用于计算宽度
+        std::string styled;  // 可能包含颜色代码
+    };
+    std::vector<EntryItem> items;
+    for (size_t i = 0; i < entryNodes.size(); ++i) {
+        int id = entryNodes[i].first;
+        const std::string& type = entryNodes[i].second;
+        std::string plain = "No." + std::to_string(id) + " " + type;
+        std::string styled;
+        if (static_cast<int>(i) == currentEntryIndex) {
+            styled = CYAN + plain + RESET;
+        }
+        else {
+            styled = plain;
+        }
+        items.push_back({ plain, styled });
+    }
+
+    std::ostringstream out;
+    int currentLineLen = 0;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const auto& item = items[i];
+        // 加上一个分隔空格（行首不加）
+        int neededLen = (currentLineLen > 0 ? 1 : 0) + static_cast<int>(item.plain.length());
+        if (currentLineLen > 0 && currentLineLen + neededLen > cols) {
+            out << "\n";
+            currentLineLen = 0;
+            neededLen = static_cast<int>(item.plain.length()); // 无前导空格
+        }
+        if (currentLineLen > 0) {
+            out << " ";
+            currentLineLen++;
+        }
+        out << item.styled;
+        currentLineLen += item.plain.length();
+    }
+    out << "\n";
+    std::cout << out.str();
+    std::cout << separator << "\n";
+}
+
+void BlueprintViewer::RenderAll() {
+    ClearScreen();
+    PrintEntryNodes();
+    int cols = GetConsoleColumns();
+    std::string splitLine(cols, '-');
+    std::cout << splitLine << "\n";
+    BuildAndPrintCurrentFlow();
 }
