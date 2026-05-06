@@ -92,11 +92,24 @@ private:
         std::vector<std::pair<std::string, std::unique_ptr<ExecTreeNode>>> branches; // 分支标签 -> 子树
     };
 
-    // 渲染结果
-    struct RenderBlock {
-        std::vector<std::string> lines;
-        int centerCol; // 框中心相对于 lines 的列索引
+    // 着色指令：在指定行中，从 startCol 到 endCol 应用某种颜色
+    struct ColorSpan {
+        int startCol;      // 可见列起始（包含）
+        int endCol;        // 可见列结束（不包含）
+        const char* color; // ANSI 颜色码，如 CYAN
     };
+
+    struct RenderBlock {
+        std::vector<std::string> lines;            // 纯文本行（无 ANSI）
+        int centerCol;
+        // 按行索引存储该行中需要着色的区间
+        std::vector<std::vector<ColorSpan>> spans; // spans[row] 即该行的着色列表
+    };
+    static void AddColorSpan(RenderBlock& block, int row, int startVisCol, int endVisCol, const char* color);
+    static void MergeChildSpans(RenderBlock& parent, const RenderBlock& child,
+        int rowOffset, int colOffset);
+    static const char* GetTopBorderColor(int nodeId, int sel1, int sel2);
+    static const char* GetBottomBorderColor(int nodeId, int sel1, int sel2);
 
     // 辅助函数
     std::vector<int> GetEntryNodeIds() const;

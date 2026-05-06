@@ -114,6 +114,42 @@ bool BlueprintViewer::LaunchChildProcess(const std::wstring& exePath) {
     }
 }
 
+void BlueprintViewer::AddColorSpan(RenderBlock& block, int row, int startVisCol, int endVisCol, const char* color) {
+    if (!color) return;
+    if (row >= (int)block.spans.size())
+        block.spans.resize(row + 1);
+    block.spans[row].push_back({ startVisCol, endVisCol, color });
+}
+
+void BlueprintViewer::MergeChildSpans(RenderBlock& parent, const RenderBlock& child,
+    int rowOffset, int colOffset) {
+    for (size_t r = 0; r < child.spans.size(); ++r) {
+        int targetRow = rowOffset + (int)r;
+        if (targetRow >= (int)parent.spans.size())
+            parent.spans.resize(targetRow + 1);
+        for (const auto& sp : child.spans[r]) {
+            ColorSpan shifted = sp;
+            shifted.startCol += colOffset;
+            shifted.endCol += colOffset;
+            parent.spans[targetRow].push_back(shifted);
+        }
+    }
+}
+
+const char* BlueprintViewer::GetTopBorderColor(int nodeId, int sel1, int sel2) {
+    if (nodeId == sel1 && nodeId == sel2) return CYAN;
+    if (nodeId == sel1) return CYAN;
+    if (nodeId == sel2) return ORANGE;
+    return nullptr;
+}
+
+const char* BlueprintViewer::GetBottomBorderColor(int nodeId, int sel1, int sel2) {
+    if (nodeId == sel1 && nodeId == sel2) return ORANGE;
+    if (nodeId == sel1) return CYAN;
+    if (nodeId == sel2) return ORANGE;
+    return nullptr;
+}
+
 void BlueprintViewer::Run() {
     HANDLE eventsToWait[3] = { hLoadBPEvent, hNodeChangedEvent, hVarChangedEvent };
     DWORD numEvents = 3;
@@ -508,11 +544,13 @@ size_t BlueprintViewer::VisibleLength(const std::string& s) {
     return len;
 }
 
-BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode* node,
+BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(
+    const ExecTreeNode* node,
     std::unordered_set<int>& visited,
     int depth,
     int selectedId1,
-    int selectedId2) const {
+    int selectedId2) const
+{
     RenderBlock result;
     constexpr int MAX_DEPTH = 20;
     if (!node || depth > MAX_DEPTH || visited.count(node->nodeId)) {
@@ -522,112 +560,106 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
     }
     visited.insert(node->nodeId);
 
-    // 1. 当前节点框（纯文本构造，之后根据需要添加颜色）
+    // ---- 纯文本节点框 ----
     std::string top_raw = "+" + std::string(boxWidth - 2, '-') + "+";
-    std::string middle = "| " + node->nodeType + std::string(maxNodeNameLength - node->nodeType.size(), ' ') + " |";
+    std::string middle = "| " + node->nodeType +
+        std::string(maxNodeNameLength - node->nodeType.size(), ' ') + " |";
     std::string bottom_raw = "+" + std::string(boxWidth - 2, '-') + "+";
 
-    // 根据选中状态决定边框颜色
-    bool isSel1 = (node->nodeId == selectedId1);
-    bool isSel2 = (node->nodeId == selectedId2);
-    std::string top_colored, bottom_colored;
-
-    if (isSel1 && isSel2) {
-        top_colored = CYAN + top_raw + RESET;
-        bottom_colored = ORANGE + bottom_raw + RESET;
-    }
-    else if (isSel1) {
-        top_colored = CYAN + top_raw + RESET;
-        bottom_colored = CYAN + bottom_raw + RESET;
-    }
-    else if (isSel2) {
-        top_colored = ORANGE + top_raw + RESET;
-        bottom_colored = ORANGE + bottom_raw + RESET;
-    }
-    else {
-        top_colored = top_raw;
-        bottom_colored = bottom_raw;
-    }
-
-    std::vector<std::string> nodeLines = { top_colored, middle, bottom_colored };
+    std::vector<std::string> nodeLines = { top_raw, middle, bottom_raw };
     int center = boxWidth / 2;
 
+    // ---- 记录当前节点框的着色区间（仅边框，不包含 middle） ----
+    int nodeBaseRow = (int)result.lines.size(); // 将在合并后调整，暂存
+    const char* topColor = GetTopBorderColor(node->nodeId, selectedId1, selectedId2);
+    const char* bottomColor = GetBottomBorderColor(node->nodeId, selectedId1, selectedId2);
+    // 先临时保存，在最终组装时加入
+
     if (node->branches.empty()) {
-        result.lines = std::move(nodeLines);
+        result.lines = nodeLines;
         result.centerCol = center;
+        // 着色
+        if (topColor)    AddColorSpan(result, 0, 0, boxWidth, topColor);
+        if (bottomColor) AddColorSpan(result, 2, 0, boxWidth, bottomColor);
         return result;
     }
 
-    // 2. 递归子分支
+    // 2. 递归子分支（纯文本，带 spans）
     std::vector<RenderBlock> childBlocks;
     for (auto& branch : node->branches) {
-        childBlocks.push_back(RenderExecTree(branch.second.get(), visited, depth + 1, selectedId1, selectedId2));
+        childBlocks.push_back(RenderExecTree(branch.second.get(), visited,
+            depth + 1, selectedId1, selectedId2));
     }
 
     if (node->branches.size() == 1) {
-        // === 单分支：垂直对齐中心 ===
+        // ===== 单分支 =====
         const auto& child = childBlocks[0];
         int requiredCenter = std::max(center, child.centerCol);
         int parentLeftPad = requiredCenter - center;
         int tempWidth = parentLeftPad + boxWidth;
-        int childWidth = (int)VisibleLength(child.lines[0]);
+        int childWidth = (int)child.lines[0].size();   // 纯文本长度 = 可见宽度
         int totalWidth = std::max(tempWidth, childWidth);
 
         int newCenter = parentLeftPad + center;
         int childLeftPad = newCenter - child.centerCol;
         int childRightPad = totalWidth - (childLeftPad + childWidth);
 
-        // 父节点行填充（保证可见宽度为 totalWidth）
+        // 父节点行填充
         for (auto& line : nodeLines) {
-            int visLen = (int)VisibleLength(line);
+            int len = (int)line.size();
             line = std::string(parentLeftPad, ' ') + line
-                + std::string(totalWidth - parentLeftPad - visLen, ' ');
+                + std::string(totalWidth - parentLeftPad - len, ' ');
         }
-        result.lines = std::move(nodeLines);
+        result.lines = nodeLines;
+        result.centerCol = newCenter;
+
+        // 父节点着色（注意行索引 0,1,2）
+        if (topColor)    AddColorSpan(result, 0, parentLeftPad, parentLeftPad + boxWidth, topColor);
+        if (bottomColor) AddColorSpan(result, 2, parentLeftPad, parentLeftPad + boxWidth, bottomColor);
 
         // 连接线
-        std::string line1(totalWidth, ' '); line1[newCenter] = '|';
-        std::string line2(totalWidth, ' '); line2[newCenter] = 'v';
-        result.lines.push_back(line1);
-        result.lines.push_back(line2);
+        result.lines.push_back(std::string(totalWidth, ' '));
+        result.lines.back()[newCenter] = '|';
+        result.lines.push_back(std::string(totalWidth, ' '));
+        result.lines.back()[newCenter] = 'v';
 
-        // 子块行
+        // 子块行（纯文本拼接）
+        size_t baseRow = result.lines.size();
         for (auto& line : child.lines) {
-            result.lines.push_back(std::string(childLeftPad, ' ') + line + std::string(childRightPad, ' '));
+            result.lines.push_back(std::string(childLeftPad, ' ') + line +
+                std::string(childRightPad, ' '));
         }
-        result.centerCol = newCenter;
+        // 合并子块 spans（偏移列 childLeftPad，行偏移 baseRow）
+        MergeChildSpans(result, child, (int)baseRow, childLeftPad);
     }
     else {
-        // === 多分支：水平拼接 ===
+        // ===== 多分支 =====
         int totalWidth = boxWidth;
         std::vector<int> offsets;
         int gap = 3;
         for (auto& blk : childBlocks) {
             offsets.push_back(totalWidth);
-            totalWidth += (int)VisibleLength(blk.lines[0]) + gap;
+            totalWidth += (int)blk.lines[0].size() + gap;
         }
         if (!offsets.empty()) totalWidth -= gap;
 
         int parentStart = (totalWidth - boxWidth) / 2;
-        result.lines.reserve(3 + std::max_element(childBlocks.begin(), childBlocks.end(),
-            [](auto& a, auto& b) { return a.lines.size() < b.lines.size(); })->lines.size() + 2);
-
-        // 父节点框行（带颜色，需根据可见宽度计算右侧填充）
+        // 父节点行（填充）
         {
-            int topVisLen = (int)VisibleLength(top_colored);
-            int midVisLen = (int)VisibleLength(middle);
-            int botVisLen = (int)VisibleLength(bottom_colored);
             std::string topPad(parentStart, ' ');
-            result.lines.push_back(topPad + top_colored + std::string(totalWidth - parentStart - topVisLen, ' '));
-            result.lines.push_back(topPad + middle + std::string(totalWidth - parentStart - midVisLen, ' '));
-            result.lines.push_back(topPad + bottom_colored + std::string(totalWidth - parentStart - botVisLen, ' '));
+            result.lines.push_back(topPad + top_raw + std::string(totalWidth - parentStart - boxWidth, ' '));
+            result.lines.push_back(topPad + middle + std::string(totalWidth - parentStart - (int)middle.size(), ' '));
+            result.lines.push_back(topPad + bottom_raw + std::string(totalWidth - parentStart - boxWidth, ' '));
         }
         int parentCenter = parentStart + center;
+
+        // 父节点着色
+        if (topColor)    AddColorSpan(result, 0, parentStart, parentStart + boxWidth, topColor);
+        if (bottomColor) AddColorSpan(result, 2, parentStart, parentStart + boxWidth, bottomColor);
 
         // 连接线
         std::string conn1(totalWidth, ' '); conn1[parentCenter] = '|';
         result.lines.push_back(conn1);
-
         std::string conn2(totalWidth, ' ');
         for (size_t i = 0; i < childBlocks.size(); ++i) {
             int childCenter = offsets[i] + childBlocks[i].centerCol;
@@ -642,23 +674,27 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
         }
         result.lines.push_back(conn2);
 
-        // 子块行（修复：删除填充，高度不足时保留空格）
+        // 子块拼接（纯文本）
         size_t maxChildLines = 0;
         for (auto& blk : childBlocks) maxChildLines = std::max(maxChildLines, blk.lines.size());
+        int baseRow = (int)result.lines.size();
+
         for (size_t row = 0; row < maxChildLines; ++row) {
             std::string line(totalWidth, ' ');
             for (size_t i = 0; i < childBlocks.size(); ++i) {
                 if (row < childBlocks[i].lines.size()) {
                     const std::string& childLine = childBlocks[i].lines[row];
-                    int visLen = (int)VisibleLength(childLine);
+                    int visLen = (int)childLine.size();
                     if (offsets[i] + visLen <= totalWidth)
                         line.replace(offsets[i], visLen, childLine);
-                    else if (offsets[i] < totalWidth)
-                        line.replace(offsets[i], totalWidth - offsets[i], childLine);
                 }
-                // 超出子块高度的行：不做任何填充，保留空格
             }
             result.lines.push_back(line);
+        }
+
+        // 合并每个子块的 spans（列偏移为 offsets[i]，行偏移为 baseRow）
+        for (size_t i = 0; i < childBlocks.size(); ++i) {
+            MergeChildSpans(result, childBlocks[i], baseRow, offsets[i]);
         }
         result.centerCol = parentCenter;
     }
@@ -666,9 +702,34 @@ BlueprintViewer::RenderBlock BlueprintViewer::RenderExecTree(const ExecTreeNode*
     return result;
 }
 
+// ---- 修改后的 PrintRenderBlock ----
 void BlueprintViewer::PrintRenderBlock(const RenderBlock& block) {
-    for (const auto& line : block.lines) {
-        std::cout << line << '\n';
+    for (size_t row = 0; row < block.lines.size(); ++row) {
+        const std::string& line = block.lines[row];
+        // 获取该行的着色区间，按起始列排序
+        std::vector<ColorSpan> rowSpans;
+        if (row < block.spans.size())
+            rowSpans = block.spans[row];
+        std::sort(rowSpans.begin(), rowSpans.end(),
+            [](const ColorSpan& a, const ColorSpan& b) { return a.startCol < b.startCol; });
+
+        size_t col = 0;
+        for (const auto& sp : rowSpans) {
+            // 输出着色区间之前的普通文本
+            if (col < (size_t)sp.startCol) {
+                std::cout << line.substr(col, sp.startCol - col);
+                col = sp.startCol;
+            }
+            // 输出着色文本
+            std::cout << sp.color;
+            std::cout << line.substr(col, sp.endCol - col);
+            std::cout << RESET;
+            col = sp.endCol;
+        }
+        // 输出剩余部分
+        if (col < line.size())
+            std::cout << line.substr(col);
+        std::cout << '\n';
     }
 }
 
